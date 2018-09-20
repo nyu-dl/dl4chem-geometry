@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import numpy as np
@@ -14,7 +16,7 @@ def to_onehot(val, cat, etc=0):
             onehot[ci]=1
     
     if etc==1 and np.sum(onehot)==0:
-        print val
+        print(val)
 
     return onehot
 
@@ -69,7 +71,7 @@ def bondFeatures(bbs, ri, samering, shortpath):
 
 data='COD'
 n_min=2
-n_max=30
+n_max=50
 atom_dim=33
 edge_dim=15
 
@@ -79,6 +81,7 @@ D1 = []
 D2 = []
 D3 = []
 D4 = []
+D5 = []
 mollist2 = []
 smilist2 = []
 for i in range(len(mollist)):
@@ -89,7 +92,7 @@ for i in range(len(mollist)):
     Chem.rdmolops.AssignStereochemistry(mol)
 
     if mol.GetNumHeavyAtoms() < n_min or mol.GetNumHeavyAtoms() > n_max:
-        print 'error'
+        print('error')
         break
     
     n = mol.GetNumAtoms()
@@ -129,30 +132,34 @@ for i in range(len(mollist)):
     proximity = np.zeros((n_max, n_max))
     proximity[:n, :n] = euclidean_distances(pos)
 
+    pos2 = np.zeros((n_max, 3))
+    pos2[:n] = pos
+
     D1.append(np.array(node, dtype=int))
     D2.append(np.array(mask, dtype=int))
     D3.append(np.array(edge, dtype=int))
     D4.append(np.array(proximity))
-
-    if len(D1)==44000:
+    D5.append(np.array(pos2))
+    
+    if len(D1)==66000:
         break
-
 
 D1 = np.array(D1, dtype=int)
 D2 = np.array(D2, dtype=int)
 D3 = np.array(D3, dtype=int)
 D4 = np.array(D4)
+D5 = np.array(D5)
 
-print D1.shape, D2.shape, D3.shape, D4.shape
-print np.sum(np.isnan(D1)), np.sum(np.isnan(D2)), np.sum(np.isnan(D3)), np.sum(np.isnan(D4))
-print D1.nbytes, D3.nbytes
+print([D1.shape, D2.shape, D3.shape, D4.shape, D5.shape])
+print([np.sum(np.isnan(D1)), np.sum(np.isnan(D2)), np.sum(np.isnan(D3)), np.sum(np.isnan(D4))])
+print([D1.nbytes, D3.nbytes])
 
 D1 = sparse.COO.from_numpy(D1)
 D2 = sparse.COO.from_numpy(D2)
 D3 = sparse.COO.from_numpy(D3)
-print D1.nbytes, D3.nbytes
+print([D1.nbytes, D3.nbytes])
 
-pkl.dump([D1, D2, D3, D4], open(data+'_molvec_'+str(n_max)+'.p','wb'))
+pkl.dump([D1, D2, D3, D4, D5], open(data+'_molvec_'+str(n_max)+'.p','wb'))
 
 mollist2 = np.array(mollist2)
 smilist2 = np.array(smilist2)
