@@ -8,16 +8,29 @@ import PredX_MPNN as MPNN
 import sparse
 
 # hyper-parameters
-data = 'COD'
-n_max = 50
-dim_node = 33
-dim_edge = 15
+data = 'COD' # or 'QM9'
+
+if data == 'COD':
+
+    n_max = 50
+    dim_node = 33
+    dim_edge = 15
+    ntrn = 60000
+    nval = 3000
+    ntst = 3000
+    
+elif data == 'QM9':
+
+    n_max = 9
+    dim_node = 20
+    dim_edge = 15
+    ntrn = 100000
+    nval = 5000
+    ntst = 5000
+    
 dim_h = 50
 dim_f = 250
-batch_size = 20
-ntrn = 60000
-nval = 3000
-ntst = 3000
+batch_size = 20   
 
 load_path = None
 save_path = './'+data+'_NPE_newmodel_pred_'+str(n_max)+'_epoch.ckpt'
