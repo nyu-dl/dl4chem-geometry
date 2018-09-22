@@ -22,7 +22,6 @@ class Model(object):
         self.mask = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1]) # node yes = 1, no = 0
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
-        
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
         
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
@@ -30,6 +29,12 @@ class Model(object):
         
         self.node_embed = self._embed_node(self.node)
         self.edge_2 = tf.concat([self.edge, tf.tile( tf.reshape(self.n_atom, [self.batch_size, 1, 1, 1]), [1, self.n_max, self.n_max, 1] )], 3)
+
+        # p(R|G)
+        self.proximity_edge_wgt = self._edge_nn(self.edge_2, name = 'proximity', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
+        self.proximity_hidden = self._MPNN(self.proximity_edge_wgt, self.node_embed, name = 'proximity', reuse = False)
+        self.proximity_pred = self._f_nn(tf.concat([self.proximity_hidden, self.node_embed], 2), self.edge_2, name = 'proximity', reuse = False) #[batch_size, n_max, n_max] 
+        #self.edge_2 = tf.concat([self.edge_2, tf.reshape(self.proximity_pred, [self.batch_size, self.n_max, self.n_max, 1])], 3)
 
         # q(Z|R,G)
         self.Z_edge_wgt = self._edge_nn(self.edge_2,  name = 'vaeZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
@@ -41,9 +46,15 @@ class Model(object):
         # p(X|Z,G)
         self.X_edge_wgt = self._edge_nn(self.edge_2, name = 'vaeX', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.X_hidden = self._MPNN(self.X_edge_wgt, self.Z_sample + self.node_embed, name = 'vaeX', reuse = False)
-        self.pos_0 = self._g_nn(self.X_hidden, 3, name = 'vaeX', reuse = False)
-        self.pos_0_prox = self._pos_to_proximity(self.pos_0, False)
-        
+
+        self.pos_list=[]
+        self.prox_list=[]
+        self.pos_list.append(self._g_nn(self.X_hidden, 3, name = 'vaeX', reuse = False))
+        self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = False))
+        for i in range(10):   #hyperparameters!
+            self.pos_list.append(self._NPE(self.pos_list[-1], self.prox_list[-1], self.proximity_pred, i!=0))
+            self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True)) 
+
         self.saver = tf.train.Saver()
         self.sess = tf.Session()
         
@@ -51,15 +62,21 @@ class Model(object):
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None):
 
         # objective functions
-        cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD_zero(self.Z_mu, self.Z_lsgms), [1, 2]) ) # posterior - prior
-        cost_proximity = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.pos_0_prox, self.proximity), [1, 2]) ) / 2  
-        cost_reg = tf.reduce_mean(tf.reduce_sum(tf.square(self.pos_0), [1, 2]))              
+        cost_R = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.proximity_pred, self.proximity), [1, 2]) ) / 2  
         
-        cost_npe = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.pos_0, self.pos), [1, 2]) )
-                
-        cost = cost_KLDZ + cost_npe + 0 * cost_proximity + 0 * cost_reg
+        cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.Z_mu, self.Z_lsgms), [1, 2]) )
+        cost_pos_list = [tf.reduce_mean(tf.reduce_sum(tf.squared_difference(x, self.pos), [1, 2]) ) for x in self.pos_list]
+        cost_prox_list = [tf.reduce_mean(tf.reduce_sum(tf.squared_difference(x, self.proximity), [1, 2]) ) / 2 for x in self.prox_list] 
+        cost_reg_list = [tf.reduce_mean(tf.reduce_sum(tf.square(x), [1, 2]))  for x in self.pos_list]             
 
-        train_op = tf.train.AdamOptimizer().minimize(cost)
+        cost_pos = cost_pos_list[-1]
+        cost_prox = tf.add_n(cost_prox_list)/len(cost_prox_list)
+        cost_reg = cost_reg_list[0]
+        
+        #cost_pre = cost_R #+ 1. * cost_KLDZ + 1e-2 * cost_prox_list[0] + 1e-5 * cost_reg_list[0] #hyperparameters!
+        #train_pre = tf.train.AdamOptimizer().minimize(cost_pre)
+        cost_op = cost_KLDZ + cost_pos + 1e-1 * cost_prox + 1e-5 * cost_reg + 1e-1 * cost_R #hyperparameters!
+        train_op = tf.train.AdamOptimizer().minimize(cost_op)
 
 
         self.sess.run(tf.global_variables_initializer())
@@ -68,22 +85,68 @@ class Model(object):
             self.saver.restore( self.sess, load_path )
 
         # session 
-        print('::: start training')
         n_batch = int(len(D1_t)/self.batch_size)
         n_batch_val = int(len(D1_v)/self.batch_size)
         np.set_printoptions(precision=5, suppress=True)
         
+        
+        """
+        # pre-training
+        print('::: start pre-training')
+        valaggr = np.zeros(500)
+        for epoch in range(10):
+        
+            [D1_t, D2_t, D3_t, D4_t, D5_t, MS_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t, MS_t])
+            
+            trnscores = np.zeros((n_batch, 1))
+            for i in range(n_batch):
+                start_ = i * self.batch_size
+                end_ = start_ + self.batch_size
+
+                trnresult = self.sess.run([train_pre, cost_pre],
+                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
+ 
+                assert np.sum(np.isnan(trnresult[1:])) == 0
+                trnscores[i,:] = trnresult[1:]
+            
+            print(np.mean(trnscores,0))
+
+            valscores = np.zeros(n_batch_val)
+            for i in range(n_batch_val): 
+                start_ = i * self.batch_size
+                end_ = start_ + self.batch_size
+                     
+                valresult = self.sess.run(cost_pre,
+                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_]})
+             
+                valscores[i] = valresult
+            
+            valaggr[epoch] = np.mean(valscores)
+            print('::: pre-training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
+
+
+            if epoch > 20 and np.min(valaggr[0:epoch-20]) < np.min(valaggr[epoch-20:epoch+1]) and valaggr[epoch] < np.min(valaggr[0:epoch]) * 1.01:
+                print('::: pre-training terminate')
+                if save_path is not None:
+                    self.saver.save( self.sess, save_path )
+               
+                break
+        """
+
+
+        # training
+        print('::: start training')
         valaggr = np.zeros(500)
         for epoch in range(500):
         
             [D1_t, D2_t, D3_t, D4_t, D5_t, MS_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t, MS_t])
             
-            trnscores = np.zeros((n_batch, 3))
+            trnscores = np.zeros((n_batch, 6))
             for i in range(n_batch):
                 start_ = i * self.batch_size
                 end_ = start_ + self.batch_size
         
-                D5_batch = self.sess.run(self.pos_0,
+                D5_batch = self.sess.run(self.pos_list[-1],
                                     feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_]})
         
                 for j in range(start_,end_):
@@ -102,7 +165,7 @@ class Model(object):
                     
                     D5_t[j][:n_est] =  np.array(prb_mol.GetConformer(0).GetPositions())
 
-                trnresult = self.sess.run([train_op, cost, cost_KLDZ, cost_npe],
+                trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos_list[-1], cost_prox_list[-1], cost_reg, cost_R],
                                     feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
  
                 assert np.sum(np.isnan(trnresult[1:])) == 0
@@ -116,7 +179,7 @@ class Model(object):
                 start_ = i * self.batch_size
                 end_ = start_ + self.batch_size
                      
-                D5_batch = self.sess.run(self.pos_0,
+                D5_batch = self.sess.run(self.pos_list[-1],
                                     feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_]})
              
                 valres=[]
@@ -140,6 +203,10 @@ class Model(object):
             print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
 
 
+            if epoch % 10 == 0:
+                if save_path is not None:
+                    self.saver.save( self.sess, save_path )
+
             if epoch > 20 and np.min(valaggr[0:epoch-20]) < np.min(valaggr[epoch-20:epoch+1]) and valaggr[epoch] < np.min(valaggr[0:epoch]) * 1.01:
                 print('::: terminate')
                 if save_path is not None:
@@ -159,8 +226,8 @@ class Model(object):
 
     def _draw_sample(self, mu, lsgms):
     
-        epsilon = tf.random_normal(tf.shape(lsgms), 0, 1)
-        sample = tf.multiply(tf.exp(0.5*lsgms), epsilon)
+        epsilon = tf.random_normal(tf.shape(lsgms), 0., 1.)
+        sample = tf.multiply(tf.exp(0.5 * lsgms), epsilon)
         sample = tf.add(mu, sample)
         sample = tf.multiply(sample, self.mask)
     
@@ -225,7 +292,7 @@ class Model(object):
     
     def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True):
     
-        for i in range(5):
+        for i in range(5): #hyperparameters!
         
             mv_0 = self._msg_nn(edge_wgt, node_hidden_0)
             node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
@@ -297,11 +364,44 @@ class Model(object):
         
         return proximity
        
-
-    def _KLD_zero(self, mu0, lsgm0):# [batch_size, n_max, dim_h]
+       
+    def _NPE(self, pos, pos_proximity, ref_proximity, reuse=True): #[batch_size, n_max, 3], [batch_size, n_max, n_max]
         
-        a = tf.exp(lsgm0) + tf.square(mu0)
-        b = 1 + lsgm0
+        with tf.variable_scope('NPE', reuse=reuse):
+    
+            diff_proximity = tf.subtract(ref_proximity, pos_proximity)
+              
+            delta = tf.reshape(tf.reduce_mean( tf.square( diff_proximity ) , [1, 2]), [self.batch_size, 1]) / self.n_atom_pair
+    
+            w1 = tf.concat([delta, self.n_atom], 1) #[batch_size, 1]
+            w1 = tf.layers.dense(w1, 10, activation = tf.nn.sigmoid)
+            w1 = tf.layers.dense(w1, 1)
+            w1 = tf.exp(w1)
+            w1 = tf.reshape(w1, [self.batch_size, 1, 1])
+    
+            wgts = tf.div(diff_proximity, pos_proximity + 1e-5)
+            wgts = tf.multiply(wgts, self.mask) # [batch_size, n_max, n_max]
+            wgts = tf.multiply(wgts, tf.transpose(self.mask, perm = [0, 2, 1]))
+            wgts = tf.reshape(wgts, [self.batch_size, self.n_max, self.n_max, 1])
+    
+            pos_1 = tf.expand_dims(pos, axis = 2)
+            pos_2 = tf.expand_dims(pos, axis = 1)
+            pos_sub = tf.subtract(pos_1, pos_2) # [batch_size, n_max, n_max, 3]
+            
+            pos_diff = tf.multiply(wgts, pos_sub) # [batch_size, n_max, n_max, 3]
+            pos_diff = tf.transpose(pos_diff, [0, 1, 3, 2])
+            pos_diff = w1 * tf.reduce_mean(pos_diff, 3)# [batch_size, n_max, 3]
+    
+            pos = pos + pos_diff
+            pos = tf.multiply(pos, self.mask)
+        
+        return pos
+
+
+    def _KLD(self, mu, lsgm):# [batch_size, n_max, dim_h]
+        
+        a = tf.exp(lsgm) + tf.square(mu)
+        b = 1. + lsgm
         
         kld = 0.5 * tf.reduce_sum(a - b, 2, keepdims = True) * self.mask
         

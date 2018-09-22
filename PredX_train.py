@@ -8,7 +8,7 @@ import PredX_MPNN as MPNN
 import sparse
 
 # hyper-parameters
-data = 'COD' # or 'QM9'
+data = 'QM9' #'COD' or 'QM9'
 
 if data == 'COD':
 
@@ -29,11 +29,11 @@ elif data == 'QM9':
     ntst = 5000
     
 dim_h = 50
-dim_f = 250
+dim_f = 100
 batch_size = 20   
 
 load_path = None
-save_path = './'+data+'_NPE_newmodel_pred_'+str(n_max)+'_epoch.ckpt'
+save_path = './'+data+'_'+str(n_max)+'_model.ckpt'
 
 print('::: load data')
 [D1, D2, D3, D4, D5] = pkl.load(open('./'+data+'_molvec_'+str(n_max)+'.p','rb'))
