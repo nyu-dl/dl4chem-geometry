@@ -10,6 +10,14 @@ import sparse
 # hyper-parameters
 data = 'QM9' #'COD' or 'QM9'
 
+import argparse
+parser = argparse.ArgumentParser(description='Train student network')
+
+parser.add_argument('--dec', type=str, default='mpnn', choices=['mpnn','npe','none'])
+parser.add_argument('--save_dir', type=str, default='./checkpoints/')
+
+args = parser.parse_args()
+
 if data == 'COD':
 
     n_max = 50
@@ -18,7 +26,7 @@ if data == 'COD':
     ntrn = 60000
     nval = 3000
     ntst = 3000
-    
+
 elif data == 'QM9':
 
     n_max = 9
@@ -27,13 +35,13 @@ elif data == 'QM9':
     ntrn = 100000
     nval = 5000
     ntst = 5000
-    
+
 dim_h = 50
 dim_f = 100
-batch_size = 20   
+batch_size = 20
 
 load_path = None
-save_path = './'+data+'_'+str(n_max)+'_model.ckpt'
+save_path = args.save_dir+data+'_'+str(n_max)+'_'+str(args.dec)+'_model.ckpt'
 
 print('::: load data')
 [D1, D2, D3, D4, D5] = pkl.load(open('./'+data+'_molvec_'+str(n_max)+'.p','rb'))
@@ -64,7 +72,7 @@ molsup_tst =molsup[ntrn+nval:ntrn+nval+ntst]
 
 del D1, D2, D3, D4, D5, molsup
 
-model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size)
+model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec)
 with model.sess:
-    model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)  
-    #model.saver.restore( model.sess, save_path ) 
+    model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
+    #model.saver.restore( model.sess, save_path )
