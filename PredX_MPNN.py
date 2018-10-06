@@ -10,13 +10,17 @@ from tensorboardX import SummaryWriter
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, alignment_type='default'):
 
         # hyper-parameters
         self.dec = dec
         self.data = data
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
 
+        if alignment_type == 'linear':
+            self.msd_func = self.linear_transform_msd
+        else:
+            self.msd_func = self.mol_msd
         # variables
         self.G = tf.Graph()
         self.G.as_default()
@@ -85,7 +89,7 @@ class Model(object):
 
         cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.Z_mu, self.Z_lsgms), [1, 2]) )
 
-        cost_pos_list = [tf.reduce_mean( self.mol_msd(x, self.pos, self.mask) ) for x in self.pos_list]
+        cost_pos_list = [tf.reduce_mean( self.msd_func(x, self.pos, self.mask) ) for x in self.pos_list]
         #cost_pos_list = [tf.reduce_mean(tf.reduce_sum(tf.squared_difference(x, self.pos), [1, 2]) ) for x in self.pos_list]
         cost_prox_list = [tf.reduce_mean(tf.reduce_sum(tf.squared_difference(x, self.proximity), [1, 2]) ) / 2 for x in self.prox_list]
         cost_reg_list = [tf.reduce_mean(tf.reduce_sum(tf.square(x), [1, 2]))  for x in self.pos_list]
@@ -206,16 +210,51 @@ class Model(object):
 
                 break
 
+    def do_mask(self, vec, m):
+        return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
 
     def mol_msd(self, frames, targets, masks):
         frames -= tf.reduce_mean(frames, axis = 1, keepdims = True)
         targets -= tf.reduce_mean(targets, axis = 1, keepdims = True)
 
-        def do_mask(vec, m):
-            return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
 
-        loss = tf.stack([rmsd.squared_deviation( do_mask(frames[i], masks[i]), do_mask(targets[i], masks[i]) ) for i in range(self.batch_size)], 0)
+
+        loss = tf.stack([rmsd.squared_deviation( self.do_mask(frames[i], masks[i]), self.do_mask(targets[i], masks[i]) ) for i in range(self.batch_size)], 0)
         return loss / tf.reduce_sum(masks, axis=[1,2])
+
+    def linear_transform_msd(self, frames, targets, masks):
+        def linearly_transform_frames(padded_frames, padded_targets):
+            s, u, v = tf.svd(padded_frames)
+            tol = 1e-7
+            atol = tf.reduce_max(s) * tol
+            s = tf.boolean_mask(s, s > atol)
+            s_inv = tf.diag(1. / s)
+            pseudo_inverse = tf.matmul(v, tf.matmul(s_inv, u, transpose_b=True))
+
+            weight_matrix = tf.matmul(padded_targets, pseudo_inverse)
+            transformed_frames = tf.matmul(weight_matrix, padded_frames)
+            return transformed_frames
+
+        padding = tf.constant([[0, 0], [0, 0], [0, 1]])
+        padded_frames = tf.pad(frames, padding, 'constant', constant_values=1)
+        padded_targets = tf.pad(targets, padding, 'constant', constant_values=1)
+
+        mask_matrices = []
+        for i in range(self.batch_size):
+            mask_matrix = tf.diag(tf.reshape(masks[i], [-1]))
+            mask_matrices.append(mask_matrix)
+        #mask_matrix = tf.diag(tf.reshape(masks, [self.batch_size, -1]))
+        mask_tensor = tf.stack(mask_matrices)
+        masked_frames = tf.matmul(mask_tensor, padded_frames)
+        masked_targets = tf.matmul(mask_tensor, padded_targets)
+        transformed_frames = []
+        for i in range(self.batch_size):
+            transformed_frames.append(linearly_transform_frames(masked_frames[i], masked_targets[i]))
+        transformed_frames = tf.stack(transformed_frames)
+        #transformed_frames = linearly_transform_frames(masked_frames, masked_targets)
+        loss = tf.losses.mean_squared_error(transformed_frames, masked_targets)
+
+        return loss
 
     def _permutation(self, set):
 
