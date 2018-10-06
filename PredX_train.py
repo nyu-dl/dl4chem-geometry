@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description='Train student network')
 
 parser.add_argument('--dec', type=str, default='mpnn', choices=['mpnn','npe','none'])
 parser.add_argument('--save_dir', type=str, default='./checkpoints/')
+parser.add_argument('--alignment-type', type=str, default='default')
 
 args = parser.parse_args()
 
@@ -72,7 +73,7 @@ molsup_tst =molsup[ntrn+nval:ntrn+nval+ntst]
 
 del D1, D2, D3, D4, D5, molsup
 
-model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec)
+model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec, args.alignment_type)
 with model.sess:
     model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
     #model.saver.restore( model.sess, save_path )
