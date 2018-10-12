@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description='Train student network')
 
 parser.add_argument('--dec', type=str, default='mpnn', choices=['mpnn','npe','none'])
 parser.add_argument('--save_dir', type=str, default='./checkpoints/')
-parser.add_argument('--alignment-type', type=str, default='default')
+parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default','linear','kabsch'])
 
 args = parser.parse_args()
 

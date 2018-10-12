@@ -7,6 +7,9 @@ from rdkit.Chem import AllChem
 import tftraj.rmsd as rmsd
 import copy
 from tensorboardX import SummaryWriter
+from tf_rmsd import tf_centroid, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
+import pdb
+import rmsd
 
 class Model(object):
 
@@ -19,7 +22,9 @@ class Model(object):
 
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
-        else:
+        elif alignment_type == 'kabsch':
+            self.msd_func = self.kabsch_msd
+        elif alignment_type == 'default':
             self.msd_func = self.mol_msd
         # variables
         self.G = tf.Graph()
@@ -148,9 +153,30 @@ class Model(object):
                     D5_t[j][:n_est] =  np.array(prb_mol.GetConformer(0).GetPositions())
                 """
 
-                trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R],
+                #trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R],
+                #                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
+                #masks_np = np.sum(np.sum(D2_t[start_:end_], axis=1), axis=1)
+                #print (masks_np)
+                #print ((masks_np == 0).sum(), (masks_np == 1).sum())
+                trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R, self.pos_list[-1]],
                                     feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
 
+                pred_pos = trnresult[-1]
+                trnresult = trnresult[:-1]
+                """
+                ground_pos = D5_t[start_:end_]
+                ground_mask = D2_t[start_:end_]
+                np_rmsd = np.zeros((pred_pos.shape[0],))
+
+                for ii in range(pred_pos.shape[0]):
+                    mask_ii = int(ground_mask[ii].sum())
+                    ground_pos_ii = ground_pos[ii][:mask_ii]
+                    pred_pos_ii = pred_pos[ii][:mask_ii]
+                    np_rmsd[ii] = rmsd.kabsch_rmsd(ground_pos_ii - rmsd.centroid(ground_pos_ii), pred_pos_ii - rmsd.centroid(pred_pos_ii))
+
+                print (trnresult[3], np_rmsd.mean())
+                print ('--------------')
+                """
                 # log results
                 curr_iter = epoch * n_batch + i
                 summary_writer.add_scalar("train/cost_op", trnresult[1], curr_iter)
@@ -213,11 +239,21 @@ class Model(object):
     def do_mask(self, vec, m):
         return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
 
+    """
+    def kabsch_msd(self, frames, targets, masks):
+        masks_int = tf.cast(tf.reduce_sum(masks, axis=[1,2]), tf.int32)
+        loss = tf.stack([tf_kabsch_rmsd(targets[i][:masks_int[i]] - tf_centroid(targets[i][:masks_int[i]]), frames[i][:masks_int[i]] - tf_centroid(frames[i][:masks_int[i]])) for i in range(self.batch_size)], 0)
+        return loss
+    """
+    def kabsch_msd(self, frames, targets, masks):
+        frames_cent = frames - tf_centroid(frames)
+        targets_cent = targets - tf_centroid(targets)
+        loss = tf.stack([tf_kabsch_rmsd(targets_cent[i], frames_cent[i]) for i in range(self.batch_size)], 0)
+        return loss
+
     def mol_msd(self, frames, targets, masks):
         frames -= tf.reduce_mean(frames, axis = 1, keepdims = True)
         targets -= tf.reduce_mean(targets, axis = 1, keepdims = True)
-
-
 
         loss = tf.stack([rmsd.squared_deviation( self.do_mask(frames[i], masks[i]), self.do_mask(targets[i], masks[i]) ) for i in range(self.batch_size)], 0)
         return loss / tf.reduce_sum(masks, axis=[1,2])
