@@ -51,12 +51,22 @@ def tf_kabsch_rmsd(P, Q):
     P = tf_kabsch_rotate(P, Q)
     return tf_rmsd(P, Q)
 
-def tf_kabsch_rmsd_masked(P, Q, N):
-    P = tf_kabsch_rotate(P, Q)
-    return tf_rmsd_masked(P, Q, N)
+def tf_kabsch_rmsd_masked(P, Q, mask):
+    N = tf.reduce_sum(mask)
+    mask_mat = tf.diag(tf.reshape(mask, (-1,)))
+    P_masked = tf.matmul(mask_mat, P)
+    Q_masked = tf.matmul(mask_mat, Q)
+    P_transformed = tf_kabsch_rotate(P_masked, Q_masked)
+    return tf_rmsd_masked(P_transformed, Q_masked, N)
 
 def tf_centroid(P):
     return tf.reduce_mean(P, axis=0, keepdims=True)
+
+def tf_centroid_masked(P, mask):
+    N = tf.reduce_sum(mask)
+    mask_mat = tf.diag(tf.reshape(mask, (-1,)))
+    P_masked = tf.matmul(mask_mat, P)
+    return tf.reduce_sum(P_masked, axis=0, keepdims=True) / tf.cast(N, tf.float32)
 
 if __name__ == "__main__":
     P = tf.placeholder(tf.float32, [None, 3])

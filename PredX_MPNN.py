@@ -7,7 +7,7 @@ from rdkit.Chem import AllChem
 import tftraj.rmsd as rmsd
 import copy
 from tensorboardX import SummaryWriter
-from tf_rmsd import tf_centroid, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
+from tf_rmsd import tf_centroid, tf_centroid_masked, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
 import pdb
 import rmsd
 
@@ -246,9 +246,15 @@ class Model(object):
         return loss
     """
     def kabsch_msd(self, frames, targets, masks):
-        frames_cent = frames - tf_centroid(frames)
-        targets_cent = targets - tf_centroid(targets)
-        loss = tf.stack([tf_kabsch_rmsd(targets_cent[i], frames_cent[i]) for i in range(self.batch_size)], 0)
+        losses = []
+        for i in range(self.batch_size):
+            frame = frames[i]
+            target = targets[i]
+            mask = masks[i]
+            target_cent = target - tf_centroid_masked(target, mask)
+            frame_cent = frame - tf_centroid_masked(frame, mask)
+            losses.append(tf_kabsch_rmsd_masked(target_cent, frame_cent, mask))
+        loss = tf.stack(losses, 0)
         return loss
 
     def mol_msd(self, frames, targets, masks):
