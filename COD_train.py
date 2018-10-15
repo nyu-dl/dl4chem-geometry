@@ -42,29 +42,29 @@ del D1, D2, D3, D4
 
 model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size)
 with model.sess:
-    model.train(D1_trn, D2_trn, D3_trn, D4_trn, D1_val, D2_val, D3_val, D4_val, load_path, save_path)  
+    model.train(D1_trn, D2_trn, D3_trn, D4_trn, D1_val, D2_val, D3_val, D4_val, load_path, save_path)
     #model.saver.restore( model.sess, save_path )
 
     n_batch_tst = int(len(D1_tst)/model.batch_size)
- 
+
     aggr_pos = []
     for iterid in range(10):
         print iterid
-        
+
         all_pos_pred = []
-        for i in range(n_batch_tst): 
+        for i in range(n_batch_tst):
             start_ = i*batch_size
             end_ = start_+batch_size
-            
-            [pos_pred_, proximity_pred] = model.sess.run([model.val_pos_0, model.val_proximity_pred], 
+
+            [pos_pred_, proximity_pred] = model.sess.run([model.val_pos_0, model.val_proximity_pred],
                                 feed_dict = {model.node: D1_tst[start_:end_], model.mask: D2_tst[start_:end_], model.edge: D3_tst[start_:end_], model.proximity: D4_tst[start_:end_]})
-            
-            val_mask = D2_tst[start_:end_]                  
+
+            val_mask = D2_tst[start_:end_]
             for j in range(400):
                 pos_pred_ = model.next_pos(pos_pred_, proximity_pred, val_mask)
 
             all_pos_pred.append(pos_pred_)
-        
-        aggr_pos.append(np.concatenate(all_pos_pred, 0))    
-    
+
+        aggr_pos.append(np.concatenate(all_pos_pred, 0))
+
     pkl.dump(aggr_pos, open('./'+data+'_NPE_newmodel_pred_'+str(n_max)+'.p','wb'))
