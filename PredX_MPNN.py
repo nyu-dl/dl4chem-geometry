@@ -71,12 +71,12 @@ class Model(object):
         if dec == 'mpnn':
             # MPNN-based PE
             self.PE_edge_wgt = self._edge_nn(tf.reshape(self.proximity_pred, [self.batch_size, self.n_max, self.n_max, 1]), name = 'PE', reuse = False)
-            for i in range(1):
+            for i in range(10):
                 self.PE_hidden = self._MPNN(self.PE_edge_wgt, self._embed_pos(self.pos_list[-1], reuse = (i!=0)), name = 'PE', reuse = (i!=0))
                 self.pos_list.append(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name = 'PE', reuse = (i!=0)))
                 self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
         elif dec == 'npe':
-            for i in range(1):   #hyperparameters!
+            for i in range(10):   #hyperparameters!
                 self.pos_list.append(self._NPE(self.pos_list[-1], self.prox_list[-1], self.proximity_pred, i!=0))
                 self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
 
@@ -99,13 +99,11 @@ class Model(object):
         cost_prox_list = [tf.reduce_mean(tf.reduce_sum(tf.squared_difference(x, self.proximity), [1, 2]) ) / 2 for x in self.prox_list]
         cost_reg_list = [tf.reduce_mean(tf.reduce_sum(tf.square(x), [1, 2]))  for x in self.pos_list]
 
-        cost_pos = cost_pos_list[-1]#tf.add_n(cost_pos_list)/len(cost_pos_list)#
-        cost_prox = tf.add_n(cost_prox_list)/len(cost_prox_list)
+        cost_pos = tf.add_n(cost_pos_list)#/len(cost_pos_list)#
+        cost_prox = tf.add_n(cost_prox_list)#/len(cost_prox_list)
         cost_reg = cost_reg_list[0]
 
-        #cost_pre = cost_R #+ 1. * cost_KLDZ + 1e-2 * cost_prox_list[0] + 1e-5 * cost_reg_list[0] #hyperparameters!
-        #train_pre = tf.train.AdamOptimizer().minimize(cost_pre)
-        cost_op = cost_KLDZ + cost_pos + 0.1 * cost_prox + 0. * cost_reg + 10. * cost_R #hyperparameters!
+        cost_op = cost_KLDZ + cost_pos + 0.00001 * cost_prox + 1. * cost_R #hyperparameters!
         train_op = tf.train.AdamOptimizer().minimize(cost_op)
 
 
@@ -131,27 +129,6 @@ class Model(object):
             for i in range(n_batch):
                 start_ = i * self.batch_size
                 end_ = start_ + self.batch_size
-
-                """
-                D5_batch = self.sess.run(self.pos_list[-1],
-                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_]})
-
-                for j in range(start_,end_):
-                    prb_mol = MS_t[j]
-                    n_est = prb_mol.GetNumAtoms()
-
-                    ref_pos = D5_batch[j-start_]
-                    ref_cf = Chem.rdchem.Conformer(n_est)
-                    for k in range(n_est):
-                        ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
-
-                    ref_mol = copy.deepcopy(prb_mol)
-                    ref_mol.RemoveConformer(0)
-                    ref_mol.AddConformer(ref_cf)
-                    RMS = AllChem.AlignMol(prb_mol, ref_mol)
-
-                    D5_t[j][:n_est] =  np.array(prb_mol.GetConformer(0).GetPositions())
-                """
 
                 #trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R],
                 #                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
