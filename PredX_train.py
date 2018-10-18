@@ -45,9 +45,9 @@ D1 = D1.todense()
 D2 = D2.todense()
 D3 = D3.todense()
 
-ntrn = len(D5)-nval-ntst
 nval = 3000
 ntst = 3000
+ntrn = len(D5)-nval-ntst
 
 [molsup, molsmi] = pkl.load(open('./'+data+'_molset_'+str(n_max)+'.p','rb'))
 

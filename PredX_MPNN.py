@@ -35,7 +35,7 @@ class Model(object):
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
-        self.trn_flag = tf.placeholder(tf.bool, 1)
+        self.trn_flag = tf.placeholder(tf.bool)
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
         self.n_atom_pair = self.n_atom * (self.n_atom - 1)
