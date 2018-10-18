@@ -141,8 +141,8 @@ for i in range(len(mollist)):
     D4.append(np.array(proximity))
     D5.append(np.array(pos2))
     
-    if len(D1)==110000:
-        break
+    #if len(D1)==110000:
+    #    break
 
 D1 = np.array(D1, dtype=int)
 D2 = np.array(D2, dtype=int)

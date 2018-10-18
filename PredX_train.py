@@ -8,12 +8,12 @@ import PredX_MPNN as MPNN
 import sparse
 
 # hyper-parameters
-data = 'QM9' #'COD' or 'QM9'
+data = 'COD' #'COD' or 'QM9'
 
 import argparse
 parser = argparse.ArgumentParser(description='Train student network')
 
-parser.add_argument('--dec', type=str, default='mpnn', choices=['mpnn','npe','none'])
+parser.add_argument('--dec', type=str, default='npe', choices=['mpnn','npe','none'])
 parser.add_argument('--save_dir', type=str, default='./checkpoints/')
 parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default','linear','kabsch'])
 
@@ -24,31 +24,30 @@ if data == 'COD':
     n_max = 50
     dim_node = 33
     dim_edge = 15
-    ntrn = 60000
-    nval = 3000
-    ntst = 3000
 
 elif data == 'QM9':
 
     n_max = 9
     dim_node = 20
     dim_edge = 15
-    ntrn = 100000
-    nval = 5000
-    ntst = 5000
+
 
 dim_h = 50
 dim_f = 100
 batch_size = 20
 
-load_path = None
 save_path = args.save_dir+data+'_'+str(n_max)+'_'+str(args.dec)+'_model.ckpt'
+load_path = None
 
 print('::: load data')
 [D1, D2, D3, D4, D5] = pkl.load(open('./'+data+'_molvec_'+str(n_max)+'.p','rb'))
 D1 = D1.todense()
 D2 = D2.todense()
 D3 = D3.todense()
+
+ntrn = len(D5)-nval-ntst
+nval = 3000
+ntst = 3000
 
 [molsup, molsmi] = pkl.load(open('./'+data+'_molset_'+str(n_max)+'.p','rb'))
 

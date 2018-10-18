@@ -35,6 +35,7 @@ class Model(object):
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
+        self.trn_flag = tf.placeholder(tf.bool, 1)
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
         self.n_atom_pair = self.n_atom * (self.n_atom - 1)
@@ -136,7 +137,7 @@ class Model(object):
                 #print (masks_np)
                 #print ((masks_np == 0).sum(), (masks_np == 1).sum())
                 trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R, self.pos_list[-1]],
-                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
+                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_], self.trn_flag: True})
 
                 pred_pos = trnresult[-1]
                 trnresult = trnresult[:-1]
@@ -176,7 +177,7 @@ class Model(object):
                 end_ = start_ + self.batch_size
 
                 D5_batch = self.sess.run(self.pos_list[-1],
-                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_]})
+                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_], self.trn_flag: False})
 
                 valres=[]
                 for j in range(start_,end_):
@@ -379,9 +380,9 @@ class Model(object):
         with tf.variable_scope('g_nn'+name, reuse=reuse):
 
             inp = tf.reshape(inp, [self.batch_size * self.n_max, int(inp.shape[2])])
-            inp = tf.layers.dropout(inp, rate = 0.2)
+            inp = tf.layers.dropout(inp, rate = 0.2, training = self.trn_flag)
             inp = tf.layers.dense(inp, self.dim_f, activation = tf.nn.sigmoid)
-            inp = tf.layers.dropout(inp, rate = 0.2)
+            inp = tf.layers.dropout(inp, rate = 0.2, training = self.trn_flag)
             #inp = tf.layers.dense(inp, self.dim_f, activation = tf.nn.sigmoid)
             inp = tf.layers.dense(inp, outdim)
 
@@ -402,9 +403,9 @@ class Model(object):
             inp = tf.concat([pairwise_add, pairwise_mul, edge], 3) #pairwise_mul, #[batch_size, n_max, n_max, 2 * dim_h + dim_edge]
 
             inp = tf.reshape(inp, [self.batch_size * self.n_max * self.n_max, int(inp.shape[3])])
-            inp = tf.layers.dropout(inp, rate = 0.2)
+            inp = tf.layers.dropout(inp, rate = 0.2, training = self.trn_flag)
             inp = tf.layers.dense(inp, self.dim_f, activation = tf.nn.sigmoid)
-            inp = tf.layers.dropout(inp, rate = 0.2)
+            inp = tf.layers.dropout(inp, rate = 0.2, training = self.trn_flag)
             #inp = tf.layers.dense(inp, self.dim_f, activation = tf.nn.sigmoid)
             inp = tf.layers.dense(inp, 1)
             inp = tf.exp(inp)
