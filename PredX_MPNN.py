@@ -13,11 +13,13 @@ import rmsd
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, alignment_type='default'):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, mpnn_steps=5, npe_steps=1, alignment_type='default'):
 
         # hyper-parameters
         self.dec = dec
         self.data = data
+        self.mpnn_steps = mpnn_steps
+        self.npe_steps = npe_steps
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
 
         if alignment_type == 'linear':
@@ -26,6 +28,7 @@ class Model(object):
             self.msd_func = self.kabsch_msd
         elif alignment_type == 'default':
             self.msd_func = self.mol_msd
+
         # variables
         self.G = tf.Graph()
         self.G.as_default()
@@ -76,7 +79,7 @@ class Model(object):
                 self.pos_list.append(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name = 'PE', reuse = (i!=0)))
                 self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
         elif dec == 'npe':
-            for i in range(1):   #hyperparameters!
+            for i in range(self.npe_steps):   #hyperparameters!
                 self.pos_list.append(self._NPE(self.pos_list[-1], self.prox_list[-1], self.proximity_pred, i!=0))
                 self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
 
@@ -84,10 +87,11 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None):
+    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None, event_path = None, debug=False):
 
         # SummaryWriter
-        summary_writer = SummaryWriter(save_path.split('/')[0] + '/' + save_path.split('/')[1] + '/' + self.dec, 'events')
+        if not debug:
+            summary_writer = SummaryWriter(event_path)
 
         # objective functions
         cost_R = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.proximity_pred, self.proximity), [1, 2]) ) / 2
@@ -179,12 +183,13 @@ class Model(object):
                 """
                 # log results
                 curr_iter = epoch * n_batch + i
-                summary_writer.add_scalar("train/cost_op", trnresult[1], curr_iter)
-                summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
-                summary_writer.add_scalar("train/cost_pos", trnresult[3], curr_iter)
-                summary_writer.add_scalar("train/cost_prox", trnresult[4], curr_iter)
-                summary_writer.add_scalar("train/cost_reg", trnresult[5], curr_iter)
-                summary_writer.add_scalar("train/cost_R", trnresult[6], curr_iter)
+                if not debug:
+                    summary_writer.add_scalar("train/cost_op", trnresult[1], curr_iter)
+                    summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
+                    summary_writer.add_scalar("train/cost_pos", trnresult[3], curr_iter)
+                    summary_writer.add_scalar("train/cost_prox", trnresult[4], curr_iter)
+                    summary_writer.add_scalar("train/cost_reg", trnresult[5], curr_iter)
+                    summary_writer.add_scalar("train/cost_R", trnresult[6], curr_iter)
 
 
                 assert np.sum(np.isnan(trnresult[1:])) == 0
@@ -219,22 +224,25 @@ class Model(object):
                 valscores[i] = np.mean(valres)
 
             valaggr[epoch] = np.mean(valscores)
-            summary_writer.add_scalar("val/valscores", np.mean(valscores, 0), epoch)
-            summary_writer.add_scalar("val/min_valscores", np.min(valaggr[0:epoch+1]), epoch)
+            if not debug:
+                summary_writer.add_scalar("val/valscores", np.mean(valscores, 0), epoch)
+                summary_writer.add_scalar("val/min_valscores", np.min(valaggr[0:epoch+1]), epoch)
 
             print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
 
 
             if epoch % 10 == 0:
-                if save_path is not None:
+                if save_path is not None and not debug:
                     self.saver.save( self.sess, save_path )
 
+            """
             if epoch > 30 and np.min(valaggr[0:epoch-30]) < np.min(valaggr[epoch-30:epoch+1]) and valaggr[epoch] < np.min(valaggr[0:epoch]) * 1.01:
                 print('::: terminate')
                 if save_path is not None:
                     self.saver.save( self.sess, save_path )
 
                 break
+            """
 
     def do_mask(self, vec, m):
         return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
@@ -389,7 +397,7 @@ class Model(object):
 
     def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True):
 
-        for i in range(5): #hyperparameters!
+        for i in range(self.mpnn_steps): #hyperparameters!
 
             mv_0 = self._msg_nn(edge_wgt, node_hidden_0)
             node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
