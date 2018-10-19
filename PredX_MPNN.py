@@ -10,6 +10,9 @@ from tensorboardX import SummaryWriter
 from tf_rmsd import tf_centroid, tf_centroid_masked, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
 import pdb
 import rmsd
+import glob
+import os
+import shutil
 
 class Model(object):
 
@@ -197,6 +200,17 @@ class Model(object):
             if epoch % 10 == 0:
                 if save_path is not None and not debug:
                     self.saver.save( self.sess, save_path )
+                # keep track of the best model as well in the separate checkpoint
+                # it is done by copying the checkpoint
+                if valaggr[epoch] == np.min(valaggr[0:epoch+1]):
+                    for ckpt_f in glob.glob(save_path + '*'):
+                        model_name_split = ckpt_f.split('/')
+                        model_path = '/'.join(model_name_split[:-1])
+                        model_name = model_name_split[-1]
+                        best_model_name = model_name.split('.')[0] + '_best.' + '.'.join(model_name.split('.')[1:])
+                        full_best_model_path = os.path.join(model_path, best_model_name)
+                        full_model_path = ckpt_f
+                        shutil.copyfile(full_model_path, full_best_model_path)
 
     def do_mask(self, vec, m):
         return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
