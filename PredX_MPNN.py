@@ -6,7 +6,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 import tftraj.rmsd as rmsd
 import copy
-#from tensorboardX import SummaryWriter
+from tensorboardX import SummaryWriter
 from tf_rmsd import tf_centroid, tf_centroid_masked, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
 import pdb
 import rmsd
@@ -36,14 +36,11 @@ class Model(object):
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
+        if self.virtual_node:
+            self.true_masks = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1])
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
         self.n_atom_pair = self.n_atom * (self.n_atom - 1)
-
-        if self.virtual_node:
-            self.true_masks = tf.zeros([self.batch_size, self.n_max, 1])
-            for i in range(self.batch_size):
-                self.true_masks[i, :self.n_atom-1, 0] = 1
 
         self.node_embed = self._embed_node(self.node)
         self.edge_2 = tf.concat([self.edge, tf.tile( tf.reshape(self.n_atom, [self.batch_size, 1, 1, 1]), [1, self.n_max, self.n_max, 1] )], 3)
@@ -81,10 +78,10 @@ class Model(object):
                 self.PE_hidden = self._MPNN(self.PE_edge_wgt, self._embed_pos(self.pos_list[-1], reuse = (i!=0)), name = 'PE', reuse = (i!=0))
                 if self.virtual_node:
                     self.pos_list.append(
-                        tf.matmul(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name='PE', reuse=(i != 0)),
+                        tf.multiply(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name='PE', reuse=(i != 0)),
                                   self.true_masks))
                     self.prox_list.append(
-                        tf.matmul(self._pos_to_proximity(self.pos_list[-1], reuse=True), self.true_masks))
+                        tf.multiply(self._pos_to_proximity(self.pos_list[-1], reuse=True), self.true_masks))
                 else:
                     self.pos_list.append(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name = 'PE', reuse = (i!=0)))
                     self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
@@ -97,10 +94,10 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None):
+    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None, tm_trn=None, tm_val=None):
 
         # SummaryWriter
-        #summary_writer = SummaryWriter(save_path.split('/')[0] + '/' + save_path.split('/')[1] + '/' + self.dec, 'events')
+        summary_writer = SummaryWriter(save_path.split('/')[0] + '/' + save_path.split('/')[1] + '/' + self.dec, 'events')
         # objective functions
         cost_R = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.proximity_pred, self.proximity), [1, 2]) ) / 2
 
@@ -170,7 +167,12 @@ class Model(object):
                 #masks_np = np.sum(np.sum(D2_t[start_:end_], axis=1), axis=1)
                 #print (masks_np)
                 #print ((masks_np == 0).sum(), (masks_np == 1).sum())
-                trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R, self.pos_list[-1]],
+                if self.virtual_node:
+                    trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R, self.pos_list[-1]],
+                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_],
+                                                 self.true_masks: tm_trn[start_:end_]})
+                else:
+                    trnresult = self.sess.run([train_op, cost_op, cost_KLDZ, cost_pos, cost_prox, cost_reg, cost_R, self.pos_list[-1]],
                                     feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_]})
 
                 pred_pos = trnresult[-1]
@@ -211,7 +213,8 @@ class Model(object):
                 end_ = start_ + self.batch_size
 
                 D5_batch = self.sess.run(self.pos_list[-1],
-                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_]})
+                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                                 self.true_masks: tm_val[start_:end_]})
 
                 valres=[]
                 for j in range(start_,end_):

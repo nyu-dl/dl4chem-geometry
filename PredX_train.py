@@ -48,13 +48,20 @@ batch_size = 20
 load_path = None
 save_path = args.save_dir+data+'_'+str(n_max)+'_'+str(args.dec)+'_model.ckpt'
 
+if args.virtual_node:
+    molvec_fname = './'+data+'_molvec_'+str(n_max-1)+'_vn.p'
+    molset_fname = './'+data+'_molset_'+str(n_max-1)+'_vn.p'
+else:
+    molvec_fname = './'+data+'_molvec_'+str(n_max)+'.p'
+    molset_fname = './'+data+'_molset_'+str(n_max)+'.p'
+
 print('::: load data')
-[D1, D2, D3, D4, D5] = pkl.load(open('./'+data+'_molvec_'+str(n_max)+'.p','rb'))
+[D1, D2, D3, D4, D5] = pkl.load(open(molvec_fname,'rb'))
 D1 = D1.todense()
 D2 = D2.todense()
 D3 = D3.todense()
 
-[molsup, molsmi] = pkl.load(open('./'+data+'_molset_'+str(n_max)+'.p','rb'))
+[molsup, molsmi] = pkl.load(open(molset_fname,'rb'))
 
 D1_trn = D1[:ntrn]
 D2_trn = D2[:ntrn]
@@ -75,9 +82,22 @@ D4_tst = D4[ntrn+nval:ntrn+nval+ntst]
 D5_tst = D5[ntrn+nval:ntrn+nval+ntst]
 molsup_tst =molsup[ntrn+nval:ntrn+nval+ntst]
 
+if args.virtual_node:
+    tm_trn = np.zeros(D2_trn.shape)
+    tm_val = np.zeros(D2_val.shape)
+    n_atoms_trn = D2_trn.sum(axis=1)
+    n_atoms_val = D2_val.sum(axis=1)
+    for i in range(D2_trn.shape[0]):
+        tm_trn[i, :n_atoms_trn[i, 0]-1] = 1
+    for i in range(D2_val.shape[0]):
+        tm_val[i, :n_atoms_val[i, 0]-1] = 1
+
 del D1, D2, D3, D4, D5, molsup
 
 model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec, args.alignment_type, args.virtual_node)
 with model.sess:
-    model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
+    if args.virtual_node:
+        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path, tm_trn, tm_val)
+    else:
+        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
     #model.saver.restore( model.sess, save_path )

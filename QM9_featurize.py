@@ -170,7 +170,7 @@ for i in range(len(mollist)):
     D3.append(np.array(edge, dtype=int))
     D4.append(np.array(proximity))
     D5.append(np.array(pos2))
-
+    if i % 1000 == 0: print(i, flush=True)
 
 D1 = np.array(D1, dtype=int)
 D2 = np.array(D2, dtype=int)
@@ -194,10 +194,14 @@ else:
     molvec_fname = data+'_molvec_'+str(n_max)+'.p'
     molset_fname = data + '_molset_' + str(n_max) + '.p'
 
-pkl.dump([D1, D2, D3, D4, D5], open(molvec_fname,'wb'))
+print(molvec_fname)
+print(molset_fname)
+
+with open(molvec_fname,'wb') as f:
+    pkl.dump([D1, D2, D3, D4, D5], f)
 
 mollist2 = np.array(mollist2)
 smilist2 = np.array(smilist2)
 
-
-pkl.dump([mollist2, smilist2], open(molset_fname,'wb'))
+with open(molset_fname,'wb') as f:
+    pkl.dump([mollist2, smilist2], f)
