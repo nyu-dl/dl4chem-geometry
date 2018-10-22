@@ -16,6 +16,7 @@ parser = argparse.ArgumentParser(description='Train student network')
 parser.add_argument('--dec', type=str, default='mpnn', choices=['mpnn','npe','none'])
 parser.add_argument('--save_dir', type=str, default='./checkpoints/')
 parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default','linear','kabsch'])
+parser.add_argument('--virtual-node', action='store_true')
 
 args = parser.parse_args()
 
@@ -33,6 +34,9 @@ elif data == 'QM9':
     n_max = 9
     dim_node = 20
     dim_edge = 15
+    if args.virtual_node is True:
+        n_max += 1
+        dim_edge += 1
     ntrn = 100000
     nval = 5000
     ntst = 5000
@@ -73,7 +77,7 @@ molsup_tst =molsup[ntrn+nval:ntrn+nval+ntst]
 
 del D1, D2, D3, D4, D5, molsup
 
-model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec, args.alignment_type)
+model = MPNN.Model(data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, args.dec, args.alignment_type, args.virtual_node)
 with model.sess:
     model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
     #model.saver.restore( model.sess, save_path )

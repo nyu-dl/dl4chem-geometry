@@ -6,19 +6,20 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 import tftraj.rmsd as rmsd
 import copy
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
 from tf_rmsd import tf_centroid, tf_centroid_masked, tf_kabsch_rmsd_masked, tf_kabsch_rmsd
 import pdb
 import rmsd
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, alignment_type='default'):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, alignment_type='default', virtual_node=False):
 
         # hyper-parameters
         self.dec = dec
         self.data = data
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
+        self.virtual_node = virtual_node
 
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
@@ -38,6 +39,11 @@ class Model(object):
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
         self.n_atom_pair = self.n_atom * (self.n_atom - 1)
+
+        if self.virtual_node:
+            self.true_masks = tf.zeros([self.batch_size, self.n_max, 1])
+            for i in range(self.batch_size):
+                self.true_masks[i, :self.n_atom-1, 0] = 1
 
         self.node_embed = self._embed_node(self.node)
         self.edge_2 = tf.concat([self.edge, tf.tile( tf.reshape(self.n_atom, [self.batch_size, 1, 1, 1]), [1, self.n_max, self.n_max, 1] )], 3)
@@ -73,8 +79,15 @@ class Model(object):
             self.PE_edge_wgt = self._edge_nn(tf.reshape(self.proximity_pred, [self.batch_size, self.n_max, self.n_max, 1]), name = 'PE', reuse = False)
             for i in range(1):
                 self.PE_hidden = self._MPNN(self.PE_edge_wgt, self._embed_pos(self.pos_list[-1], reuse = (i!=0)), name = 'PE', reuse = (i!=0))
-                self.pos_list.append(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name = 'PE', reuse = (i!=0)))
-                self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
+                if self.virtual_node:
+                    self.pos_list.append(
+                        tf.matmul(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name='PE', reuse=(i != 0)),
+                                  self.true_masks))
+                    self.prox_list.append(
+                        tf.matmul(self._pos_to_proximity(self.pos_list[-1], reuse=True), self.true_masks))
+                else:
+                    self.pos_list.append(self.pos_list[-1] + self._g_nn(self.PE_hidden, 3, name = 'PE', reuse = (i!=0)))
+                    self.prox_list.append(self._pos_to_proximity(self.pos_list[-1], reuse = True))
         elif dec == 'npe':
             for i in range(1):   #hyperparameters!
                 self.pos_list.append(self._NPE(self.pos_list[-1], self.prox_list[-1], self.proximity_pred, i!=0))
@@ -87,8 +100,7 @@ class Model(object):
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None):
 
         # SummaryWriter
-        summary_writer = SummaryWriter(save_path.split('/')[0] + '/' + save_path.split('/')[1] + '/' + self.dec, 'events')
-
+        #summary_writer = SummaryWriter(save_path.split('/')[0] + '/' + save_path.split('/')[1] + '/' + self.dec, 'events')
         # objective functions
         cost_R = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(self.proximity_pred, self.proximity), [1, 2]) ) / 2
 

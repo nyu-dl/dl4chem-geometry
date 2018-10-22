@@ -74,6 +74,9 @@ n_min=2
 n_max=9
 atom_dim=20
 edge_dim=15
+virtual_node = True
+if virtual_node:
+    edge_dim += 1
 
 [mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'))
 
@@ -98,22 +101,37 @@ for i in range(len(mollist)):
     n = mol.GetNumAtoms()
     ri = mol.GetRingInfo()
     ri_a = ri.AtomRings()
-    
+
     pos = mol.GetConformer().GetPositions()
-    assert n==pos.shape[0]
+    if virtual_node:
+        pos = np.vstack([pos, np.zeros(3)])
+        assert n == pos.shape[0] - 1
+    else:
+        assert n==pos.shape[0]
     
     mollist2.append(mol)
     smilist2.append(smi)
-    
-    node = np.zeros((n_max, atom_dim))
-    mask = np.zeros((n_max, 1))
-    
+
+    if virtual_node:
+        node = np.zeros((n_max+1, atom_dim))
+        mask = np.zeros((n_max+1, 1))
+    else:
+        node = np.zeros((n_max, atom_dim))
+        mask = np.zeros((n_max, 1))
+
     for j in range(n):
         atom = mol.GetAtomWithIdx(j)
         node[j, :]=atomFeatures(atom, ri, ri_a)
         mask[j, 0]=1
+    if virtual_node:
+        mask[n, 0] = 1
 
-    edge = np.zeros((n_max, n_max, edge_dim))
+    if virtual_node:
+        edge = np.zeros((n_max+1, n_max+1, edge_dim))
+        edge[:n, n, 0] = 1
+        edge[n, :n, 0] = 1
+    else:
+        edge = np.zeros((n_max, n_max, edge_dim))
     for j in range(n-1):
         for k in range(j+1, n):
             molpath = Chem.GetShortestPath(mol, j, k)
@@ -125,24 +143,34 @@ for i in range(len(mollist)):
                 if j in alist and k in alist and len(alist) <= 8:
                     samering[len(alist) - 3] += 1
 
-            bond = [mol.GetBondBetweenAtoms(molpath[mm], molpath[mm+1]) for mm in range(shortpath)] 
-            edge[j, k, :] = bondFeatures(bond, ri, samering, shortpath)
-            edge[k, j, :] = bondFeatures(bond, ri, samering, shortpath)
+            bond = [mol.GetBondBetweenAtoms(molpath[mm], molpath[mm+1]) for mm in range(shortpath)]
+            if virtual_node:
+                edge[j, k, :] = np.pad(bondFeatures(bond, ri, samering, shortpath), (1, 0), 'constant')
+                edge[k, j, :] = edge[j, k, :]
+            else:
+                edge[j, k, :] = bondFeatures(bond, ri, samering, shortpath)
+                edge[k, j, :] = bondFeatures(bond, ri, samering, shortpath)
 
-    proximity = np.zeros((n_max, n_max))
-    proximity[:n, :n] = euclidean_distances(pos)
 
-    pos2 = np.zeros((n_max, 3))
-    pos2[:n] = pos
+    if virtual_node:
+        proximity = np.zeros((n_max+1, n_max+1))
+        proximity[:n+1, :n+1] = euclidean_distances(pos)
+
+        pos2 = np.zeros((n_max+1, 3))
+        pos2[:n+1] = pos
+    else:
+        proximity = np.zeros((n_max, n_max))
+        proximity[:n, :n] = euclidean_distances(pos)
+
+        pos2 = np.zeros((n_max, 3))
+        pos2[:n] = pos
 
     D1.append(np.array(node, dtype=int))
     D2.append(np.array(mask, dtype=int))
     D3.append(np.array(edge, dtype=int))
     D4.append(np.array(proximity))
     D5.append(np.array(pos2))
-    
-    if len(D1)==110000:
-        break
+
 
 D1 = np.array(D1, dtype=int)
 D2 = np.array(D2, dtype=int)
@@ -159,9 +187,17 @@ D2 = sparse.COO.from_numpy(D2)
 D3 = sparse.COO.from_numpy(D3)
 print([D1.nbytes, D3.nbytes])
 
-pkl.dump([D1, D2, D3, D4, D5], open(data+'_molvec_'+str(n_max)+'.p','wb'))
+if virtual_node:
+    molvec_fname = data+'_molvec_'+str(n_max)+'_vn.p'
+    molset_fname = data + '_molset_' + str(n_max) + '_vn.p'
+else:
+    molvec_fname = data+'_molvec_'+str(n_max)+'.p'
+    molset_fname = data + '_molset_' + str(n_max) + '.p'
+
+pkl.dump([D1, D2, D3, D4, D5], open(molvec_fname,'wb'))
 
 mollist2 = np.array(mollist2)
 smilist2 = np.array(smilist2)
 
-pkl.dump([mollist2, smilist2], open(data+'_molset_'+str(n_max)+'.p','wb'))
+
+pkl.dump([mollist2, smilist2], open(molset_fname,'wb'))
