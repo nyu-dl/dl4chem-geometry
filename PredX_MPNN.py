@@ -16,7 +16,7 @@ import shutil
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, mpnn_steps=5, mpnn_dec_steps=1, npe_steps=10, alignment_type='default'):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, dec, mpnn_steps=5, mpnn_dec_steps=1, npe_steps=10, alignment_type='default', tol=1e-5):
 
         # hyper-parameters
         self.dec = dec
@@ -25,7 +25,7 @@ class Model(object):
         self.mpnn_dec_steps = mpnn_dec_steps
         self.npe_steps = npe_steps
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
-
+        self.tol = tol
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
         elif alignment_type == 'kabsch':
@@ -92,7 +92,9 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, save_path = None, event_path = None, debug=False):
+    def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
+            load_path = None, save_path = None, event_path = None, \
+            w_kldz=1., w_pos=1., w_prox=0.00001, w_R=1., debug=False):
 
         # SummaryWriter
         if not debug:
@@ -112,9 +114,8 @@ class Model(object):
         cost_prox = tf.add_n(cost_prox_list)#/len(cost_prox_list)
         cost_reg = cost_reg_list[0]
 
-        cost_op = cost_KLDZ + cost_pos + 0.00001 * cost_prox + 1. * cost_R #hyperparameters!
+        cost_op = w_kldz * cost_KLDZ + w_pos * cost_pos + w_prox * cost_prox + w_R * cost_R #hyperparameters!
         train_op = tf.train.AdamOptimizer().minimize(cost_op)
-
 
         self.sess.run(tf.global_variables_initializer())
         self.sess.graph.finalize()
@@ -197,20 +198,19 @@ class Model(object):
             print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
 
 
-            if epoch % 10 == 0:
-                if save_path is not None and not debug:
-                    self.saver.save( self.sess, save_path )
-                # keep track of the best model as well in the separate checkpoint
-                # it is done by copying the checkpoint
-                if valaggr[epoch] == np.min(valaggr[0:epoch+1]):
-                    for ckpt_f in glob.glob(save_path + '*'):
-                        model_name_split = ckpt_f.split('/')
-                        model_path = '/'.join(model_name_split[:-1])
-                        model_name = model_name_split[-1]
-                        best_model_name = model_name.split('.')[0] + '_best.' + '.'.join(model_name.split('.')[1:])
-                        full_best_model_path = os.path.join(model_path, best_model_name)
-                        full_model_path = ckpt_f
-                        shutil.copyfile(full_model_path, full_best_model_path)
+            if save_path is not None and not debug:
+                self.saver.save( self.sess, save_path )
+            # keep track of the best model as well in the separate checkpoint
+            # it is done by copying the checkpoint
+            if valaggr[epoch] == np.min(valaggr[0:epoch+1]) and not debug:
+                for ckpt_f in glob.glob(save_path + '*'):
+                    model_name_split = ckpt_f.split('/')
+                    model_path = '/'.join(model_name_split[:-1])
+                    model_name = model_name_split[-1]
+                    best_model_name = model_name.split('.')[0] + '_best.' + '.'.join(model_name.split('.')[1:])
+                    full_best_model_path = os.path.join(model_path, best_model_name)
+                    full_model_path = ckpt_f
+                    shutil.copyfile(full_model_path, full_best_model_path)
 
     def do_mask(self, vec, m):
         return tf.boolean_mask(vec, tf.reshape(tf.greater(m, tf.constant(0.5)), [self.n_max,]) )
@@ -221,9 +221,9 @@ class Model(object):
             frame = frames[i]
             target = targets[i]
             mask = masks[i]
-            target_cent = target - tf_centroid_masked(target, mask)
-            frame_cent = frame - tf_centroid_masked(frame, mask)
-            losses.append(tf_kabsch_rmsd_masked(target_cent, frame_cent, mask))
+            target_cent = target - tf_centroid_masked(target, mask, self.tol)
+            frame_cent = frame - tf_centroid_masked(frame, mask, self.tol)
+            losses.append(tf_kabsch_rmsd_masked(target_cent, frame_cent, mask, self.tol))
         loss = tf.stack(losses, 0)
         return loss
 
