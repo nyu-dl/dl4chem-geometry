@@ -112,5 +112,5 @@ with model.sess:
     if args.virtual_node:
         model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path, tm_trn, tm_val, event_path, debug=args.debug)
     else:
-        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path)
+        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path, event_path, debug=args.debug)
     #model.saver.restore( model.sess, save_path )
