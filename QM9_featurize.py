@@ -14,7 +14,7 @@ def to_onehot(val, cat, etc=0):
     for ci, c in enumerate(cat):
         if val == c:
             onehot[ci]=1
-    
+
     if etc==1 and np.sum(onehot)==0:
         print(val)
 
@@ -29,27 +29,27 @@ def atomFeatures(a, ri, ri_a):
         for ring in rings:
             if aid in ring and len(ring) <= 8:
                 onehot[len(ring) - 3] += 1
-    
+
         return onehot
 
     v1 = to_onehot(a.GetSymbol(), ['C','N','O','F'], 1)
     v2 = to_onehot(a.GetHybridization(), [Chem.rdchem.HybridizationType.SP,Chem.rdchem.HybridizationType.SP2,Chem.rdchem.HybridizationType.SP3], 1)
-    
+
     v3 = [a.GetAtomicNum(), a.GetDegree(), a.GetFormalCharge(), a.GetTotalNumHs(), int(a.GetIsAromatic())]
     v4 = _ringSize_a(a, ri_a)
-    
+
     v5 = np.zeros(3)
     try:
         tmp = to_onehot(a.GetProp('_CIPCode'), ['R','S'], 1)
         v5[0] = tmp[0]
-        v5[1] = tmp[1] 
+        v5[1] = tmp[1]
     except:
-        v5[2]=1 
-    
+        v5[2]=1
+
     v5 = v5[:2]
-          
+
     return np.concatenate([v1,v2,v3,v4,v5], axis=0)
- 
+
 
 def bondFeatures(bbs, ri, samering, shortpath):
 
@@ -59,14 +59,14 @@ def bondFeatures(bbs, ri, samering, shortpath):
         v3 = [int(bbs[0].GetIsConjugated()), shortpath]
     else:
         v1 = np.zeros(4)
-        v2 = np.zeros(4)  
-        v3 = [0, shortpath]  
-        
+        v2 = np.zeros(4)
+        v3 = [0, shortpath]
+
     v4 = samering
     v2 = v2[:3]
 
 
-    return np.concatenate([v1,v2,v3,v4], axis=0)       
+    return np.concatenate([v1,v2,v3,v4], axis=0)
 
 
 data='QM9'
@@ -97,7 +97,7 @@ for i in range(len(mollist)):
     if mol.GetNumHeavyAtoms() < n_min or mol.GetNumHeavyAtoms() > n_max:
         print('error')
         break
-    
+
     n = mol.GetNumAtoms()
     ri = mol.GetRingInfo()
     ri_a = ri.AtomRings()
