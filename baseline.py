@@ -21,20 +21,25 @@ if args.data == "COD":
     n_max=50
     nval=3000
     ntst=3000
+    
+elif args.data == "QM9":
+    n_max=9
+    nval=5000
+    ntst=5000
 
-    [suppl, molsmi] = pkl.load(open('./COD_molset_'+str(n_max)+'.p','rb'))
-    assert (len(suppl) == len(molsmi))
-    ntrn = len(suppl) - nval - ntst
-    # use validation set
-    if args.use_val:
-        suppl = suppl[ntrn:ntrn+nval]
-        molsmi = molsmi[ntrn:ntrn+nval]
-        nmols = nval
-    # use test set
-    else:
-        suppl = suppl[ntrn+nval:ntrn+nval+ntst]
-        molsmi = molsmi[ntrn+nval:ntrn+nval+ntst]
-        nmols = ntst
+[suppl, molsmi] = pkl.load(open('./'+str(args.data)+'_molset_'+str(n_max)+'.p','rb'))
+assert (len(suppl) == len(molsmi))
+ntrn = len(suppl) - nval - ntst
+# use validation set
+if args.use_val:
+    suppl = suppl[ntrn:ntrn+nval]
+    molsmi = molsmi[ntrn:ntrn+nval]
+    nmols = nval
+# use test set
+else:
+    suppl = suppl[ntrn+nval:ntrn+nval+ntst]
+    molsmi = molsmi[ntrn+nval:ntrn+nval+ntst]
+    nmols = ntst
 
 print (':::{}'.format("val" if args.use_val else "test"))
 # save uff and mmff results
@@ -63,12 +68,12 @@ for t in range(nmols):
                 mol_baseUFF = copy.deepcopy(mol_init_1)
                 AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, confId=0)
                 mol_baseUFF=Chem.RemoveHs(mol_baseUFF)
-                RMS_UFF = AllChem.GetBestRMS(mol_baseUFF, mol_ref)
+                RMS_UFF = AllChem.AlignMol(mol_baseUFF, mol_ref)
 
                 mol_baseMMFF = copy.deepcopy(mol_init_1)
                 AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, confId=0)
                 mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
-                RMS_MMFF = AllChem.GetBestRMS(mol_baseMMFF, mol_ref)
+                RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref)
 
                 ttest.append([n_est, RMS_UFF, RMS_MMFF])
                 break
