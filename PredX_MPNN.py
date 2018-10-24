@@ -92,6 +92,39 @@ class Model(object):
         self.sess = tf.Session()
 
 
+    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, debug=False):
+        # session
+        n_batch_val = int(len(D1_v)/self.batch_size)
+        np.set_printoptions(precision=5, suppress=True)
+
+        valscores = np.zeros(n_batch_val)
+        print ("testing model...")
+        for i in range(n_batch_val):
+            print (i, n_batch_val)
+            start_ = i * self.batch_size
+            end_ = start_ + self.batch_size
+
+            D5_batch = self.sess.run(self.pos_list[-1],
+                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_], self.trn_flag: False})
+
+            valres=[]
+            for j in range(start_,end_):
+                prb_mol = MS_v[j]
+                n_est = prb_mol.GetNumAtoms()
+
+                ref_pos = D5_batch[j-start_]
+                ref_cf = Chem.rdchem.Conformer(n_est)
+                for k in range(n_est):
+                    ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
+
+                ref_mol = copy.deepcopy(prb_mol)
+                ref_mol.RemoveConformer(0)
+                ref_mol.AddConformer(ref_cf)
+                valres.append(AllChem.AlignMol(prb_mol, ref_mol))
+
+            valscores[i] = np.mean(valres)
+        print ("val scores are {}".format(np.mean(valscores)))
+
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
             load_path = None, save_path = None, event_path = None, \
             w_kldz=1., w_pos=1., w_prox=0.00001, w_R=1., debug=False):
