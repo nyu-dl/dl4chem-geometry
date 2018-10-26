@@ -227,7 +227,7 @@ class Model(object):
             mask = masks[i]
             target_cent = target - tf_centroid_masked(target, mask, self.tol)
             frame_cent = frame - tf_centroid_masked(frame, mask, self.tol)
-            losses.append(tf_kabsch_rmsd_masked(target_cent, frame_cent, mask, self.tol))
+            losses.append(tf_kabsch_rmsd_masked(tf.stop_gradient(target_cent), frame_cent, mask, self.tol))
         loss = tf.stack(losses, 0)
         return loss
 
