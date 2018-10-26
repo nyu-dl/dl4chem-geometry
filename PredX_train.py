@@ -26,6 +26,8 @@ parser.add_argument('--mpnn-steps', type=int, default=5, help='number of mpnn st
 parser.add_argument('--batch-size', type=int, default=20, help='batch size')
 parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
 parser.add_argument('--w-reg', type=float, default=1e-3, help='weight for conditional prior regularization')
+parser.add_argument('--use-X', type=float, default=True, help='use X as input for posterior of Z')
+parser.add_argument('--use-R', type=float, default=True, help='use R(X) as input for posterior of Z')
 
 args = parser.parse_args()
 

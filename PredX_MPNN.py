@@ -16,7 +16,7 @@ import shutil
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=False):
 
         # hyper-parameters
         self.data = data
@@ -54,10 +54,16 @@ class Model(object):
         self.priorZ_sample = self._draw_sample(self.priorZ_mu, self.priorZ_lsgms)
 
         # q(Z|R(X),G) -- posterior of Z, used R insted of X as input for simplicity, should be updated
-        self.postZ_edge_wgt = self._edge_nn(self.edge_2,  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
-        self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, tf.concat([self.node_embed, self.pos], 2), name = 'postZ', reuse = False)
-        #self.postZ_edge_wgt = self._edge_nn(tf.concat([self.edge_2, tf.reshape(self.proximity, [self.batch_size, self.n_max, self.n_max, 1])], 3),  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
-        #self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self.node_embed, name = 'postZ', reuse = False)
+        if use_R:
+            self.postZ_edge_wgt = self._edge_nn(tf.concat([self.edge_2, tf.reshape(self.proximity, [self.batch_size, self.n_max, self.n_max, 1])], 3),  name = 'postZ', reuse = False)
+        else:
+            self.postZ_edge_wgt = self._edge_nn(self.edge_2,  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
+        
+        if use_X:
+            self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self._embed_node(tf.concat([self.node, self.pos], 2)), name = 'postZ', reuse = False)
+        else:
+            self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self.node_embed, name = 'postZ', reuse = False)
+        
         self.postZ_out = self._g_nn(self.postZ_hidden, self.node_embed, 2 * self.dim_h, name = 'postZ', reuse = False)
         self.postZ_mu, self.postZ_lsgms = tf.split(self.postZ_out, [self.dim_h, self.dim_h], 2)
         self.postZ_sample = self._draw_sample(self.postZ_mu, self.postZ_lsgms)
@@ -229,7 +235,7 @@ class Model(object):
             mask = masks[i]
             target_cent = target - tf_centroid_masked(target, mask, self.tol)
             frame_cent = frame - tf_centroid_masked(frame, mask, self.tol)
-            losses.append(tf_kabsch_rmsd_masked(tf.stop_gradient(target_cent), frame_cent, mask, self.tol))
+            losses.append(tf_kabsch_rmsd_masked(target_cent, frame_cent, mask, self.tol))
         loss = tf.stack(losses, 0)
         return loss
 
