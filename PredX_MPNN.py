@@ -16,8 +16,8 @@ import shutil
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=False):
-
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=True):
+        
         # hyper-parameters
         self.data = data
         self.mpnn_steps = mpnn_steps

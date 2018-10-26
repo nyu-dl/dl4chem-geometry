@@ -51,7 +51,6 @@ batch_size = args.batch_size
 load_path = None
 save_path = os.path.join(args.ckptdir, args.model_name + '_model.ckpt')
 event_path = os.path.join(args.eventdir, args.model_name)
-#save_path = args.save_dir+data+'_'+str(n_max)+'_'+str(args.dec)+'_model.ckpt'
 
 print('::: load data')
 [D1, D2, D3, D4, D5] = pkl.load(open('./'+args.data+'_molvec_'+str(n_max)+'.p','rb'))
@@ -85,7 +84,8 @@ molsup_tst =molsup[ntrn+nval:ntrn+nval+ntst]
 del D1, D2, D3, D4, D5, molsup
 
 model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size,\
-                    mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol)
+                    mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
+                    use_X=args.use_X, use_R=args.use_R)
 
 if args.loaddir != None:
     model.saver.restore(model.sess, args.loaddir)
