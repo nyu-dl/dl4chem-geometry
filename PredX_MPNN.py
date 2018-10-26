@@ -54,8 +54,10 @@ class Model(object):
         self.priorZ_sample = self._draw_sample(self.priorZ_mu, self.priorZ_lsgms)
 
         # q(Z|R(X),G) -- posterior of Z, used R insted of X as input for simplicity, should be updated
-        self.postZ_edge_wgt = self._edge_nn(tf.concat([self.edge_2, tf.reshape(self.proximity, [self.batch_size, self.n_max, self.n_max, 1])], 3),  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
-        self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self.node_embed, name = 'postZ', reuse = False)
+        self.postZ_edge_wgt = self._edge_nn(self.edge_2,  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
+        self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, tf.concat([self.node_embed, self.pos], 2), name = 'postZ', reuse = False)
+        #self.postZ_edge_wgt = self._edge_nn(tf.concat([self.edge_2, tf.reshape(self.proximity, [self.batch_size, self.n_max, self.n_max, 1])], 3),  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
+        #self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self.node_embed, name = 'postZ', reuse = False)
         self.postZ_out = self._g_nn(self.postZ_hidden, self.node_embed, 2 * self.dim_h, name = 'postZ', reuse = False)
         self.postZ_mu, self.postZ_lsgms = tf.split(self.postZ_out, [self.dim_h, self.dim_h], 2)
         self.postZ_sample = self._draw_sample(self.postZ_mu, self.postZ_lsgms)
