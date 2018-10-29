@@ -130,14 +130,15 @@ with model.sess:
                         load_path, save_path, event_path, tm_trn, tm_val, \
                         w_reg=args.w_reg, \
                         debug=args.debug)
-    if args.test:
-        if args.use_val:
-            model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, debug=args.debug)
-        else:
-            model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, debug=args.debug)
     else:
-        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
-                    D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
-                    load_path, save_path, event_path, \
-                    w_reg=args.w_reg, \
-                    debug=args.debug)
+        if args.test:
+            if args.use_val:
+                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, debug=args.debug)
+            else:
+                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, debug=args.debug)
+        else:
+            model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
+                        D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
+                        load_path, save_path, event_path, \
+                        w_reg=args.w_reg, \
+                        debug=args.debug)

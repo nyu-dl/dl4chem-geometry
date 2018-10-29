@@ -43,6 +43,9 @@ class Model(object):
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
         if self.virtual_node:
             self.true_masks = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1])
+            mask = self.true_masks
+        else:
+            mask = self.mask
         self.trn_flag = tf.placeholder(tf.bool)
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
@@ -75,12 +78,12 @@ class Model(object):
         # p(X|Z,G) -- posterior of X
         self.X_edge_wgt = self._edge_nn(self.edge_2, name = 'postX', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.X_hidden = self._MPNN(self.X_edge_wgt, self.postZ_sample + self.node_embed, name = 'postX', reuse = False)
-        self.X_pred = self._g_nn(self.X_hidden, self.node_embed, 3, name = 'postX', reuse = False)
+        self.X_pred = self._g_nn(self.X_hidden, self.node_embed, 3, name = 'postX', reuse = False, mask=mask)
 
         # Prediction of X with p(Z|G) in the test phase
         self.PX_edge_wgt = self._edge_nn(self.edge_2, name = 'postX', reuse = True) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.PX_hidden = self._MPNN(self.PX_edge_wgt, self.priorZ_sample + self.node_embed, name = 'postX', reuse = True)
-        self.PX_pred = self._g_nn(self.PX_hidden, self.node_embed, 3, name = 'postX', reuse = True)
+        self.PX_pred = self._g_nn(self.PX_hidden, self.node_embed, 3, name = 'postX', reuse = True, mask=mask)
 
         self.saver = tf.train.Saver()
         self.sess = tf.Session()
@@ -363,8 +366,9 @@ class Model(object):
         return msg
 
 
-    def _update_GRU(self, msg, node, name='', reuse=True):
+    def _update_GRU(self, msg, node, name='', reuse=True, mask=None):
 
+        if mask is None: mask=self.mask
         with tf.variable_scope('update_GRU'+name, reuse=reuse):
 
             msg = tf.reshape(msg, [self.batch_size * self.n_max, 1, self.dim_h])
@@ -374,23 +378,27 @@ class Model(object):
             _, node_next = tf.nn.dynamic_rnn(cell, msg, initial_state = node)
 
             node_next = tf.reshape(node_next, [self.batch_size, self.n_max, self.dim_h])
-            node_next = tf.multiply(node_next, self.mask)
+            node_next = tf.multiply(node_next, mask)
 
         return node_next
 
 
-    def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True):
+    def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True, true_mask=False):
 
         for i in range(self.mpnn_steps): #hyperparameters!
 
             mv_0 = self._msg_nn(edge_wgt, node_hidden_0)
-            node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
+            if true_mask and i == self.mpnn_steps - 1:
+                node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i + reuse) != 0, mask=self.true_masks)
+            else:
+                node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
 
         return node_hidden_0
 
 
-    def _g_nn(self, inp, node, outdim, name='', reuse=True): #[batch_size, n_max, -]
+    def _g_nn(self, inp, node, outdim, name='', reuse=True, mask=None): #[batch_size, n_max, -]
 
+        if mask is None: mask = self.mask
         with tf.variable_scope('g_nn'+name, reuse=reuse):
 
             inp = tf.concat([inp, node], 2)
@@ -403,7 +411,7 @@ class Model(object):
             inp = tf.layers.dense(inp, outdim)
 
             inp = tf.reshape(inp, [self.batch_size, self.n_max, outdim])
-            inp = tf.multiply(inp, self.mask)
+            inp = tf.multiply(inp, mask)
 
         return inp
 
