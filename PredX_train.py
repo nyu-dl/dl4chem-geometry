@@ -6,27 +6,27 @@ from sklearn.metrics.pairwise import euclidean_distances
 import sys, gc, os
 import PredX_MPNN as MPNN
 import sparse
-
-# hyper-parameters
-#data = 'COD' #'COD' or 'QM9'
-
 import argparse
 parser = argparse.ArgumentParser(description='Train student network')
 
-parser.add_argument('--data', type=str, default='COD', choices=['COD','QM9'])
-parser.add_argument('--dec', type=str, default='npe', choices=['mpnn','npe','none'])
+parser.add_argument('--data', type=str, default='QM9', choices=['COD','QM9'])
 parser.add_argument('--ckptdir', type=str, default='./checkpoints/')
 parser.add_argument('--eventdir', type=str, default='./events/')
+parser.add_argument('--loaddir', type=str, default=None)
 parser.add_argument('--model-name', type=str, default='test')
 parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default','linear','kabsch'])
 parser.add_argument('--virtual-node', action='store_true')
 parser.add_argument('--debug', action='store_true', help='debug mode')
+parser.add_argument('--test', action='store_true', help='test mode')
+parser.add_argument('--use-val', action='store_true', help='use validation set')
 parser.add_argument('--dim-h', type=int, default=50, help='dimension of the hidden')
 parser.add_argument('--dim-f', type=int, default=100, help='dimension of the hidden')
 parser.add_argument('--mpnn-steps', type=int, default=5, help='number of mpnn steps')
-parser.add_argument('--mpnn-dec-steps', type=int, default=1, help='number of mpnn steps for decoding')
-parser.add_argument('--npe-steps', type=int, default=10, help='number of mpnn steps')
 parser.add_argument('--batch-size', type=int, default=20, help='batch size')
+parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
+parser.add_argument('--w-reg', type=float, default=1e-3, help='weight for conditional prior regularization')
+parser.add_argument('--use-X', type=float, default=True, help='use X as input for posterior of Z')
+parser.add_argument('--use-R', type=float, default=True, help='use R(X) as input for posterior of Z')
 
 args = parser.parse_args()
 
@@ -54,7 +54,6 @@ batch_size = args.batch_size
 load_path = None
 save_path = os.path.join(args.ckptdir, args.model_name + '_model.ckpt')
 event_path = os.path.join(args.eventdir, args.model_name)
-#save_path = args.save_dir+data+'_'+str(n_max)+'_'+str(args.dec)+'_model.ckpt'
 
 if args.virtual_node:
     molvec_fname = './'+args.data+'_molvec_'+str(n_max-1)+'_vn.p'
@@ -97,20 +96,48 @@ if args.virtual_node:
     tm_val = np.zeros(D2_val.shape)
     n_atoms_trn = D2_trn.sum(axis=1)
     n_atoms_val = D2_val.sum(axis=1)
+
     for i in range(D2_trn.shape[0]):
         tm_trn[i, :n_atoms_trn[i, 0]-1] = 1
     for i in range(D2_val.shape[0]):
         tm_val[i, :n_atoms_val[i, 0]-1] = 1
 
+    if args.test and not args.use_val:
+        n_atoms_tst = D2_trn.sum(axis=1)
+        tm_tst = np.zeros(D2_tst.shape)
+        for i in range(D2_tst.shape[0]):
+            tm_tst[i, :n_atoms_val[i, 0]-1] = 1
+
 del D1, D2, D3, D4, D5, molsup
 
 model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size,\
-                    args.dec, mpnn_steps=args.mpnn_steps, mpnn_dec_steps=args.mpnn_dec_steps, npe_steps=args.npe_steps,
-                   alignment_type=args.alignment_type, virtual_node=args.virtual_node)
+                    mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
+                    use_X=args.use_X, use_R=args.use_R, virtual_node=args.virtual_node)
+
+if args.loaddir != None:
+    model.saver.restore(model.sess, args.loaddir)
 
 with model.sess:
     if args.virtual_node:
-        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path, tm_trn, tm_val, event_path, debug=args.debug)
+        if args.test:
+            if args.use_val:
+                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, tm_val, debug=args.debug)
+            else:
+                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, tm_tst, debug=args.debug)
+        else:
+            model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
+                        D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
+                        load_path, save_path, event_path, tm_trn, tm_val, \
+                        w_reg=args.w_reg, \
+                        debug=args.debug)
+    if args.test:
+        if args.use_val:
+            model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, debug=args.debug)
+        else:
+            model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, debug=args.debug)
     else:
-        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, save_path, event_path, debug=args.debug)
-    #model.saver.restore( model.sess, save_path )
+        model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
+                    D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
+                    load_path, save_path, event_path, \
+                    w_reg=args.w_reg, \
+                    debug=args.debug)
