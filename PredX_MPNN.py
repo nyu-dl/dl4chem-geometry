@@ -135,7 +135,8 @@ class Model(object):
         cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.postZ_mu, self.postZ_lsgms, self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # posterior | prior
         cost_KLD0 = tf.reduce_mean( tf.reduce_sum( self._KLD_zero(self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # prior | N(0,1)
 
-        cost_X = tf.reduce_mean( self.msd_func(self.X_pred, self.pos, self.mask) )
+        mask = self.true_masks if self.virtual_node else self.mask
+        cost_X = tf.reduce_mean( self.msd_func(self.X_pred, self.pos, mask) )
 
         cost_op = cost_X + cost_KLDZ + w_reg * cost_KLD0 #hyperparameters!
         train_op = tf.train.AdamOptimizer().minimize(cost_op)
