@@ -180,7 +180,7 @@ class Model(object):
 
                 trnresult = trnresult[1:]
                 if debug:
-                    print (trnresult)
+                    print(trnresult, flush=True)
 
                 # log results
                 curr_iter = epoch * n_batch + i
@@ -193,7 +193,7 @@ class Model(object):
                 assert np.sum(np.isnan(trnresult)) == 0
                 trnscores[i,:] = trnresult
 
-            print(np.mean(trnscores,0))
+            print(np.mean(trnscores,0), flush=True)
 
 
             valscores = np.zeros(n_batch_val)
@@ -235,7 +235,7 @@ class Model(object):
                 summary_writer.add_scalar("val/valscores", np.mean(valscores, 0), epoch)
                 summary_writer.add_scalar("val/min_valscores", np.min(valaggr[0:epoch+1]), epoch)
 
-            print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
+            print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
 
 
             if save_path is not None and not debug:
