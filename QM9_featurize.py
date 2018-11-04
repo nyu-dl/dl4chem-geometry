@@ -10,7 +10,7 @@ import sparse
 import argparse
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--virtual_node', action='store_true')
+parser.add_argument('--virtual-node', action='store_true')
 
 args = parser.parse_args()
 
