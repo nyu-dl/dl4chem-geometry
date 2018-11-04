@@ -7,6 +7,12 @@ from sklearn.metrics.pairwise import euclidean_distances
 import pickle as pkl
 import copy
 import sparse
+import argparse
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--virtual_node', action='store_true')
+
+args = parser.parse_args()
 
 def to_onehot(val, cat, etc=0):
 
@@ -74,7 +80,7 @@ n_min=2
 n_max=9
 atom_dim=20
 edge_dim=15
-virtual_node = True
+virtual_node = args.virtual_node
 if virtual_node:
     edge_dim += 1
 
