@@ -34,6 +34,9 @@ if args.data == 'COD':
     n_max = 50
     dim_node = 33
     dim_edge = 15
+    if args.virtual_node is True:
+        n_max += 1
+        dim_edge += 1
     nval = 3000
     ntst = 3000
 elif args.data == 'QM9':
