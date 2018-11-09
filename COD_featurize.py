@@ -84,7 +84,7 @@ virtual_node = args.virtual_node
 if virtual_node:
     edge_dim += 1
 
-[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'))
+[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'), encoding='bytes')
 
 D1 = []
 D2 = []
