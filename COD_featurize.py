@@ -81,6 +81,7 @@ n_max=50
 atom_dim=33
 edge_dim=15
 virtual_node = args.virtual_node
+print(virtual_node, flush=True)
 if virtual_node:
     edge_dim += 1
 
@@ -93,7 +94,9 @@ D4 = []
 D5 = []
 mollist2 = []
 smilist2 = []
+print(len(mollist), flush=True)
 for i in range(len(mollist)):
+    if i % 100 == 0: print(i, flush=True)
     smi = smilist[i]
     mol = mollist[i]
 
@@ -139,7 +142,6 @@ for i in range(len(mollist)):
     else:
         edge = np.zeros((n_max, n_max, edge_dim))
 
-    edge = np.zeros((n_max, n_max, edge_dim))
     for j in range(n-1):
         for k in range(j+1, n):
             molpath = Chem.GetShortestPath(mol, j, k)
