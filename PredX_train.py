@@ -29,6 +29,7 @@ parser.add_argument('--use-X', type=float, default=True, help='use X as input fo
 parser.add_argument('--use-R', type=float, default=True, help='use R(X) as input for posterior of Z')
 
 args = parser.parse_args()
+print(args.virtual_node)
 
 if args.data == 'COD':
     n_max = 50
@@ -54,7 +55,7 @@ dim_h = args.dim_h
 dim_f = args.dim_f
 batch_size = args.batch_size
 
-load_path = None
+load_path = None#os.path.join(args.ckptdir, args.model_name + '_model_best.ckpt')
 save_path = os.path.join(args.ckptdir, args.model_name + '_model.ckpt')
 event_path = os.path.join(args.eventdir, args.model_name)
 
@@ -112,21 +113,21 @@ if args.virtual_node:
             tm_tst[i, :n_atoms_val[i, 0]-1] = 1
 
 del D1, D2, D3, D4, D5, molsup
-
+print(D1_trn.shape, D3_trn.shape)
 model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size,\
                     mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
                     use_X=args.use_X, use_R=args.use_R, virtual_node=args.virtual_node)
 
-if args.loaddir != None:
-    model.saver.restore(model.sess, args.loaddir)
+#if args.loaddir != None:
+#    model.saver.restore(model.sess, args.loaddir)
 
 with model.sess:
     if args.virtual_node:
         if args.test:
             if args.use_val:
-                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, tm_val, debug=args.debug)
+                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, tm_val, debug=args.debug)
             else:
-                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, tm_tst, debug=args.debug)
+                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, load_path, tm_tst, debug=args.debug)
         else:
             model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                         D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
@@ -136,9 +137,9 @@ with model.sess:
     else:
         if args.test:
             if args.use_val:
-                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, debug=args.debug)
+                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, load_path, debug=args.debug)
             else:
-                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, debug=args.debug)
+                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, load_path, debug=args.debug)
         else:
             model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                         D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \

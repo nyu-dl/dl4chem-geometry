@@ -89,7 +89,11 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, tm=None, debug=False):
+    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, tm=None, debug=False):
+    
+        if load_path is not None:
+            self.saver.restore( self.sess, load_path )
+            
         # session
         n_batch_val = int(len(D1_v)/self.batch_size)
         np.set_printoptions(precision=5, suppress=True)
@@ -101,26 +105,58 @@ class Model(object):
             start_ = i * self.batch_size
             end_ = start_ + self.batch_size
 
-            D5_batch = self.sess.run(self.PX_pred,
-                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_], self.trn_flag: False})
+            if self.virtual_node:
+                D5_batch = self.sess.run(self.PX_pred,
+                                         feed_dict={self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                                    self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                                    self.true_masks: tm[start_:end_], self.trn_flag: False})
+
+            else:
+                D5_batch = self.sess.run(self.PX_pred,
+                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                             self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                             self.trn_flag: False})
 
             valres=[]
             for j in range(start_,end_):
-                prb_mol = MS_v[j]
-                n_est = prb_mol.GetNumAtoms()
-
-                ref_pos = D5_batch[j-start_]
-                ref_cf = Chem.rdchem.Conformer(n_est)
-                for k in range(n_est):
-                    ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
-
-                ref_mol = copy.deepcopy(prb_mol)
-                ref_mol.RemoveConformer(0)
-                ref_mol.AddConformer(ref_cf)
-                valres.append(AllChem.AlignMol(prb_mol, ref_mol))
+            
+                res = self.getRMS(MS_v[j], D5_batch[j-start_])
+                
+                valres.append(res)
 
             valscores[i] = np.mean(valres)
         print ("val scores are {}".format(np.mean(valscores)))
+
+    
+    def getRMS(self, prb_mol, ref_pos, useFF=False):
+
+        def optimizeWithFF(mol):
+
+            molf = Chem.AddHs(mol, addCoords=True)
+            AllChem.MMFFOptimizeMolecule(molf)
+            molf = Chem.RemoveHs(molf)
+   
+            return molf  
+
+        n_est = prb_mol.GetNumAtoms()
+
+        ref_cf = Chem.rdchem.Conformer(n_est)
+        for k in range(n_est):
+            ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
+
+        ref_mol = copy.deepcopy(prb_mol)
+        ref_mol.RemoveConformer(0)
+        ref_mol.AddConformer(ref_cf)
+        
+        if useFF:
+            try:
+                res = AllChem.AlignMol(prb_mol, optimizeWithFF(ref_mol))
+            except:
+                res = AllChem.AlignMol(prb_mol, ref_mol)
+        else:
+            res = AllChem.AlignMol(prb_mol, ref_mol)
+        
+        return res
 
 
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
@@ -215,18 +251,10 @@ class Model(object):
 
                 valres=[]
                 for j in range(start_,end_):
-                    prb_mol = MS_v[j]
-                    n_est = prb_mol.GetNumAtoms()
-
-                    ref_pos = D5_batch[j-start_]
-                    ref_cf = Chem.rdchem.Conformer(n_est)
-                    for k in range(n_est):
-                        ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
-
-                    ref_mol = copy.deepcopy(prb_mol)
-                    ref_mol.RemoveConformer(0)
-                    ref_mol.AddConformer(ref_cf)
-                    valres.append(AllChem.AlignMol(prb_mol, ref_mol))
+                    
+                    res = self.getRMS(MS_v[j], D5_batch[j-start_])
+                
+                    valres.append(res)
 
                 valscores[i] = np.mean(valres)
 
