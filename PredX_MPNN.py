@@ -17,7 +17,7 @@ import shutil
 class Model(object):
 
     def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=True):
-        
+
         # hyper-parameters
         self.data = data
         self.mpnn_steps = mpnn_steps
@@ -58,12 +58,12 @@ class Model(object):
             self.postZ_edge_wgt = self._edge_nn(tf.concat([self.edge_2, tf.reshape(self.proximity, [self.batch_size, self.n_max, self.n_max, 1])], 3),  name = 'postZ', reuse = False)
         else:
             self.postZ_edge_wgt = self._edge_nn(self.edge_2,  name = 'postZ', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
-        
+
         if use_X:
             self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self._embed_node(tf.concat([self.node, self.pos], 2)), name = 'postZ', reuse = False)
         else:
             self.postZ_hidden = self._MPNN(self.postZ_edge_wgt, self.node_embed, name = 'postZ', reuse = False)
-        
+
         self.postZ_out = self._g_nn(self.postZ_hidden, self.node_embed, 2 * self.dim_h, name = 'postZ', reuse = False)
         self.postZ_mu, self.postZ_lsgms = tf.split(self.postZ_out, [self.dim_h, self.dim_h], 2)
         self.postZ_sample = self._draw_sample(self.postZ_mu, self.postZ_lsgms)
@@ -127,11 +127,11 @@ class Model(object):
         # objective functions
         cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.postZ_mu, self.postZ_lsgms, self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # posterior | prior
         cost_KLD0 = tf.reduce_mean( tf.reduce_sum( self._KLD_zero(self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # prior | N(0,1)
-        
+
         cost_X = tf.reduce_mean( self.msd_func(self.X_pred, self.pos, self.mask) )
 
         cost_op = cost_X + cost_KLDZ + w_reg * cost_KLD0 #hyperparameters!
-        train_op = tf.train.AdamOptimizer().minimize(cost_op)
+        train_op = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(cost_op)
 
         self.sess.run(tf.global_variables_initializer())
         self.sess.graph.finalize()
@@ -236,6 +236,7 @@ class Model(object):
             target_cent = target - tf_centroid_masked(target, mask, self.tol)
             frame_cent = frame - tf_centroid_masked(frame, mask, self.tol)
             losses.append(tf_kabsch_rmsd_masked(tf.stop_gradient(target_cent), frame_cent, mask, self.tol))
+
         loss = tf.stack(losses, 0)
         return loss
 
@@ -406,23 +407,23 @@ class Model(object):
 
 
     def _KLD(self, mu0, lsgm0, mu1, lsgm1):# [batch_size, n_max, dim_h]
-        
+
         var0 = tf.exp(lsgm0)
         var1 = tf.exp(lsgm1)
-        a = tf.div( var0 + 1e-5, var1 + 1e-5)    
+        a = tf.div( var0 + 1e-5, var1 + 1e-5)
         b = tf.div( tf.square( tf.subtract(mu1, mu0) ), var1 + 1e-5)
         c = tf.log( tf.div(var1 + 1e-5, var0 + 1e-5 ) + 1e-5)
-        
+
         kld = 0.5 * tf.reduce_sum(a + b - 1 + c, 2, keepdims = True) * self.mask
-        
-        return kld 
-    
+
+        return kld
+
 
     def _KLD_zero(self, mu0, lsgm0):# [batch_size, n_max, dim_h]
-        
+
         a = tf.exp(lsgm0) + tf.square(mu0)
         b = 1 + lsgm0
-        
+
         kld = 0.5 * tf.reduce_sum(a - b, 2, keepdims = True) * self.mask
-        
-        return kld 
+
+        return kld
