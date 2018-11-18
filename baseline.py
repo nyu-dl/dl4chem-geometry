@@ -21,7 +21,7 @@ if args.data == "COD":
     n_max=50
     nval=3000
     ntst=3000
-    
+
 elif args.data == "QM9":
     n_max=9
     nval=5000

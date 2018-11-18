@@ -16,13 +16,15 @@ import shutil
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=True):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=True, virtual_node=False):
 
         # hyper-parameters
         self.data = data
         self.mpnn_steps = mpnn_steps
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
         self.tol = tol
+        self.virtual_node = virtual_node
+
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
         elif alignment_type == 'kabsch':
@@ -39,6 +41,11 @@ class Model(object):
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
+        if self.virtual_node:
+            self.true_masks = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1])
+            mask = self.true_masks
+        else:
+            mask = self.mask
         self.trn_flag = tf.placeholder(tf.bool)
 
         self.n_atom = tf.reduce_sum( tf.transpose(self.mask, [0, 2, 1]), 2) #[batch_size, 1]
@@ -71,18 +78,22 @@ class Model(object):
         # p(X|Z,G) -- posterior of X
         self.X_edge_wgt = self._edge_nn(self.edge_2, name = 'postX', reuse = False) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.X_hidden = self._MPNN(self.X_edge_wgt, self.postZ_sample + self.node_embed, name = 'postX', reuse = False)
-        self.X_pred = self._g_nn(self.X_hidden, self.node_embed, 3, name = 'postX', reuse = False)
+        self.X_pred = self._g_nn(self.X_hidden, self.node_embed, 3, name = 'postX', reuse = False, mask=mask)
 
         # Prediction of X with p(Z|G) in the test phase
         self.PX_edge_wgt = self._edge_nn(self.edge_2, name = 'postX', reuse = True) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.PX_hidden = self._MPNN(self.PX_edge_wgt, self.priorZ_sample + self.node_embed, name = 'postX', reuse = True)
-        self.PX_pred = self._g_nn(self.PX_hidden, self.node_embed, 3, name = 'postX', reuse = True)
+        self.PX_pred = self._g_nn(self.PX_hidden, self.node_embed, 3, name = 'postX', reuse = True, mask=mask)
 
         self.saver = tf.train.Saver()
         self.sess = tf.Session()
 
 
-    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, debug=False):
+    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, tm=None, debug=False):
+
+        if load_path is not None:
+            self.saver.restore( self.sess, load_path )
+
         # session
         n_batch_val = int(len(D1_v)/self.batch_size)
         np.set_printoptions(precision=5, suppress=True)
@@ -94,30 +105,62 @@ class Model(object):
             start_ = i * self.batch_size
             end_ = start_ + self.batch_size
 
-            D5_batch = self.sess.run(self.PX_pred,
-                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_], self.trn_flag: False})
+            if self.virtual_node:
+                D5_batch = self.sess.run(self.PX_pred,
+                                         feed_dict={self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                                    self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                                    self.true_masks: tm[start_:end_], self.trn_flag: False})
+
+            else:
+                D5_batch = self.sess.run(self.PX_pred,
+                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                             self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                             self.trn_flag: False})
 
             valres=[]
             for j in range(start_,end_):
-                prb_mol = MS_v[j]
-                n_est = prb_mol.GetNumAtoms()
 
-                ref_pos = D5_batch[j-start_]
-                ref_cf = Chem.rdchem.Conformer(n_est)
-                for k in range(n_est):
-                    ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
+                res = self.getRMS(MS_v[j], D5_batch[j-start_])
 
-                ref_mol = copy.deepcopy(prb_mol)
-                ref_mol.RemoveConformer(0)
-                ref_mol.AddConformer(ref_cf)
-                valres.append(AllChem.AlignMol(prb_mol, ref_mol))
+                valres.append(res)
 
             valscores[i] = np.mean(valres)
         print ("val scores are {}".format(np.mean(valscores)))
 
 
+    def getRMS(self, prb_mol, ref_pos, useFF=False):
+
+        def optimizeWithFF(mol):
+
+            molf = Chem.AddHs(mol, addCoords=True)
+            AllChem.MMFFOptimizeMolecule(molf)
+            molf = Chem.RemoveHs(molf)
+
+            return molf
+
+        n_est = prb_mol.GetNumAtoms()
+
+        ref_cf = Chem.rdchem.Conformer(n_est)
+        for k in range(n_est):
+            ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
+
+        ref_mol = copy.deepcopy(prb_mol)
+        ref_mol.RemoveConformer(0)
+        ref_mol.AddConformer(ref_cf)
+
+        if useFF:
+            try:
+                res = AllChem.AlignMol(prb_mol, optimizeWithFF(ref_mol))
+            except:
+                res = AllChem.AlignMol(prb_mol, ref_mol)
+        else:
+            res = AllChem.AlignMol(prb_mol, ref_mol)
+
+        return res
+
+
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
-            load_path = None, save_path = None, event_path = None, \
+            load_path = None, save_path = None, event_path = None, tm_trn=None, tm_val=None,
             w_reg=1e-3, debug=False):
 
         # SummaryWriter
@@ -128,7 +171,8 @@ class Model(object):
         cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.postZ_mu, self.postZ_lsgms, self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # posterior | prior
         cost_KLD0 = tf.reduce_mean( tf.reduce_sum( self._KLD_zero(self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # prior | N(0,1)
 
-        cost_X = tf.reduce_mean( self.msd_func(self.X_pred, self.pos, self.mask) )
+        mask = self.true_masks if self.virtual_node else self.mask
+        cost_X = tf.reduce_mean( self.msd_func(self.X_pred, self.pos, mask) )
 
         cost_op = cost_X + cost_KLDZ + w_reg * cost_KLD0 #hyperparameters!
         train_op = tf.train.AdamOptimizer(learning_rate=3e-4).minimize(cost_op)
@@ -156,12 +200,23 @@ class Model(object):
                 start_ = i * self.batch_size
                 end_ = start_ + self.batch_size
 
-                trnresult = self.sess.run([train_op, cost_op, cost_X, cost_KLDZ, cost_KLD0],
-                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_], self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_], self.pos: D5_t[start_:end_], self.trn_flag: True})
+                if self.virtual_node:
+                    trnresult = self.sess.run([train_op, cost_op, cost_X, cost_KLDZ, cost_KLD0],
+                                              feed_dict={self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_],
+                                                         self.edge: D3_t[start_:end_],
+                                                         self.proximity: D4_t[start_:end_],
+                                                         self.pos: D5_t[start_:end_],
+                                                         self.true_masks: tm_trn[start_:end_],
+                                                         self.trn_flag: True})
+                else:
+                    trnresult = self.sess.run([train_op, cost_op, cost_X, cost_KLDZ, cost_KLD0],
+                                    feed_dict = {self.node: D1_t[start_:end_], self.mask: D2_t[start_:end_],
+                                                 self.edge: D3_t[start_:end_], self.proximity: D4_t[start_:end_],
+                                                 self.pos: D5_t[start_:end_], self.trn_flag: True})
 
                 trnresult = trnresult[1:]
                 if debug:
-                    print (trnresult)
+                    print(trnresult, flush=True)
 
                 # log results
                 curr_iter = epoch * n_batch + i
@@ -174,7 +229,7 @@ class Model(object):
                 assert np.sum(np.isnan(trnresult)) == 0
                 trnscores[i,:] = trnresult
 
-            print(np.mean(trnscores,0))
+            print(np.mean(trnscores,0), flush=True)
 
 
             valscores = np.zeros(n_batch_val)
@@ -182,23 +237,24 @@ class Model(object):
                 start_ = i * self.batch_size
                 end_ = start_ + self.batch_size
 
-                D5_batch = self.sess.run(self.PX_pred,
-                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_], self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_], self.trn_flag: False})
+                if self.virtual_node:
+                    D5_batch = self.sess.run(self.PX_pred,
+                                             feed_dict={self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                                        self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                                        self.true_masks: tm_val[start_:end_], self.trn_flag: False})
+
+                else:
+                    D5_batch = self.sess.run(self.PX_pred,
+                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
+                                                 self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                                 self.trn_flag: False})
 
                 valres=[]
                 for j in range(start_,end_):
-                    prb_mol = MS_v[j]
-                    n_est = prb_mol.GetNumAtoms()
 
-                    ref_pos = D5_batch[j-start_]
-                    ref_cf = Chem.rdchem.Conformer(n_est)
-                    for k in range(n_est):
-                        ref_cf.SetAtomPosition(k, ref_pos[k].tolist())
+                    res = self.getRMS(MS_v[j], D5_batch[j-start_])
 
-                    ref_mol = copy.deepcopy(prb_mol)
-                    ref_mol.RemoveConformer(0)
-                    ref_mol.AddConformer(ref_cf)
-                    valres.append(AllChem.AlignMol(prb_mol, ref_mol))
+                    valres.append(res)
 
                 valscores[i] = np.mean(valres)
 
@@ -207,8 +263,7 @@ class Model(object):
                 summary_writer.add_scalar("val/valscores", np.mean(valscores, 0), epoch)
                 summary_writer.add_scalar("val/min_valscores", np.min(valaggr[0:epoch+1]), epoch)
 
-            print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]))
-
+            print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
 
             if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
@@ -340,8 +395,9 @@ class Model(object):
         return msg
 
 
-    def _update_GRU(self, msg, node, name='', reuse=True):
+    def _update_GRU(self, msg, node, name='', reuse=True, mask=None):
 
+        if mask is None: mask=self.mask
         with tf.variable_scope('update_GRU'+name, reuse=reuse):
 
             msg = tf.reshape(msg, [self.batch_size * self.n_max, 1, self.dim_h])
@@ -351,23 +407,27 @@ class Model(object):
             _, node_next = tf.nn.dynamic_rnn(cell, msg, initial_state = node)
 
             node_next = tf.reshape(node_next, [self.batch_size, self.n_max, self.dim_h])
-            node_next = tf.multiply(node_next, self.mask)
+            node_next = tf.multiply(node_next, mask)
 
         return node_next
 
 
-    def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True):
+    def _MPNN(self, edge_wgt, node_hidden_0, name='', reuse=True, true_mask=False):
 
         for i in range(self.mpnn_steps): #hyperparameters!
 
             mv_0 = self._msg_nn(edge_wgt, node_hidden_0)
-            node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
+            if true_mask and i == self.mpnn_steps - 1:
+                node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i + reuse) != 0, mask=self.true_masks)
+            else:
+                node_hidden_0 = self._update_GRU(mv_0, node_hidden_0, name=name, reuse=(i+reuse)!=0)#[batch_size, n_max, dim_h]
 
         return node_hidden_0
 
 
-    def _g_nn(self, inp, node, outdim, name='', reuse=True): #[batch_size, n_max, -]
+    def _g_nn(self, inp, node, outdim, name='', reuse=True, mask=None): #[batch_size, n_max, -]
 
+        if mask is None: mask = self.mask
         with tf.variable_scope('g_nn'+name, reuse=reuse):
 
             inp = tf.concat([inp, node], 2)
@@ -380,7 +440,7 @@ class Model(object):
             inp = tf.layers.dense(inp, outdim)
 
             inp = tf.reshape(inp, [self.batch_size, self.n_max, outdim])
-            inp = tf.multiply(inp, self.mask)
+            inp = tf.multiply(inp, mask)
 
         return inp
 
