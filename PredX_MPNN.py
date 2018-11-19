@@ -112,7 +112,8 @@ class Model(object):
 
         print ("testing model...")
         for i in range(n_batch_val):
-            print (i, n_batch_val)
+            if debug:
+                print (i, n_batch_val)
             start_ = i * val_batch_size
             end_ = start_ + val_batch_size
 
@@ -239,6 +240,7 @@ class Model(object):
 
                 trnresult = trnresult[1:]
                 if debug:
+                    print (i, n_batch)
                     print(trnresult, flush=True)
 
                 # log results
