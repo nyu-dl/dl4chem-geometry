@@ -16,12 +16,16 @@ import shutil
 
 class Model(object):
 
-    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, batch_size, mpnn_steps=5, alignment_type='default', tol=1e-5, use_X=True, use_R=True, virtual_node=False):
+    def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, \
+                batch_size, val_num_samples, \
+                mpnn_steps=5, alignment_type='default', tol=1e-5, \
+                use_X=True, use_R=True, virtual_node=False):
 
         # hyper-parameters
         self.data = data
         self.mpnn_steps = mpnn_steps
         self.n_max, self.dim_node, self.dim_edge, self.dim_h, self.dim_f, self.batch_size = n_max, dim_node, dim_edge, dim_h, dim_f, batch_size
+        self.val_num_samples = val_num_samples
         self.tol = tol
         self.virtual_node = virtual_node
 
@@ -36,6 +40,8 @@ class Model(object):
         self.G = tf.Graph()
         self.G.as_default()
 
+        # allow the tensorflow graph to be flexible for number of samples in batch
+        # will be useful for validation when we use multiple samples
         self.node = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.dim_node])
         self.mask = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1]) # node yes = 1, no = 0
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
@@ -89,44 +95,60 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, tm=None, debug=False):
-
+    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, tm_v=None, debug=False):
         if load_path is not None:
             self.saver.restore( self.sess, load_path )
 
-        # session
-        n_batch_val = int(len(D1_v)/self.batch_size)
-        np.set_printoptions(precision=5, suppress=True)
+        # val batch size is different from train batch size
+        # since we use multiple samples
+        val_batch_size = int(self.batch_size / self.val_num_samples)
+        n_batch_val = int(len(D1_v)/val_batch_size)
+        assert ((self.batch_size % self.val_num_samples) == 0)
+        assert (len(D1_v) % val_batch_size == 0)
 
-        valscores = np.zeros(n_batch_val)
+        val_size = D1_v.shape[0]
+        valscores_mean = np.zeros(val_size)
+        valscores_std = np.zeros(val_size)
+
         print ("testing model...")
         for i in range(n_batch_val):
             print (i, n_batch_val)
-            start_ = i * self.batch_size
-            end_ = start_ + self.batch_size
+            start_ = i * val_batch_size
+            end_ = start_ + val_batch_size
+
+            node_val = np.repeat(D1_v[start_:end_], self.val_num_samples, axis=0)
+            mask_val = np.repeat(D2_v[start_:end_], self.val_num_samples, axis=0)
+            edge_val = np.repeat(D3_v[start_:end_], self.val_num_samples, axis=0)
+            proximity_val = np.repeat(D4_v[start_:end_], self.val_num_samples, axis=0)
 
             if self.virtual_node:
+                true_masks_val = np.repeat(tm_v[start_:end_], self.val_num_samples, axis=0)
                 D5_batch = self.sess.run(self.PX_pred,
-                                         feed_dict={self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
-                                                    self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
-                                                    self.true_masks: tm[start_:end_], self.trn_flag: False})
+                                         feed_dict={self.node: node_val, self.mask: mask_val,
+                                                    self.edge: edge_val, self.proximity: proximity_val,
+                                                    self.true_masks: true_masks_val, self.trn_flag: False})
 
             else:
                 D5_batch = self.sess.run(self.PX_pred,
-                                feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
-                                             self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
+                                feed_dict = {self.node: node_val, self.mask: mask_val,
+                                             self.edge: edge_val, self.proximity: proximity_val,
                                              self.trn_flag: False})
-
             valres=[]
-            for j in range(start_,end_):
-
-                res = self.getRMS(MS_v[j], D5_batch[j-start_])
-
+            for j in range(D5_batch.shape[0]):
+                ms_v_index = int(j / self.val_num_samples) + start_
+                res = self.getRMS(MS_v[ms_v_index], D5_batch[j])
                 valres.append(res)
 
-            valscores[i] = np.mean(valres)
-        print ("val scores are {}".format(np.mean(valscores)))
+            valres = np.array(valres)
+            valres = np.reshape(valres, (val_batch_size, self.val_num_samples))
+            valres_mean = np.mean(valres, axis=1)
+            valres_std = np.std(valres, axis=1)
 
+            valscores_mean[start_:end_] = valres_mean
+            valscores_std[start_:end_] = valres_std
+
+        print ("val scores: mean is {} , std is {}".format(np.mean(valscores_mean), np.mean(valscores_std)))
+        return np.mean(valscores_mean), np.mean(valscores_std)
 
     def getRMS(self, prb_mol, ref_pos, useFF=False):
 
@@ -187,10 +209,11 @@ class Model(object):
         n_batch_val = int(len(D1_v)/self.batch_size)
         np.set_printoptions(precision=5, suppress=True)
 
-
         # training
         print('::: start training')
-        valaggr = np.zeros(500)
+        valaggr_mean = np.zeros(500)
+        valaggr_std = np.zeros(500)
+
         for epoch in range(500):
 
             [D1_t, D2_t, D3_t, D4_t, D5_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t])
@@ -231,45 +254,28 @@ class Model(object):
 
             print(np.mean(trnscores,0), flush=True)
 
+            valscores_mean, valscores_std = self.test(D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, \
+                                            load_path=None, tm_v=tm_val, debug=debug)
 
-            valscores = np.zeros(n_batch_val)
-            for i in range(n_batch_val):
-                start_ = i * self.batch_size
-                end_ = start_ + self.batch_size
+            valaggr_mean[epoch] = valscores_mean
+            valaggr_std[epoch] = valscores_std
 
-                if self.virtual_node:
-                    D5_batch = self.sess.run(self.PX_pred,
-                                             feed_dict={self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
-                                                        self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
-                                                        self.true_masks: tm_val[start_:end_], self.trn_flag: False})
-
-                else:
-                    D5_batch = self.sess.run(self.PX_pred,
-                                    feed_dict = {self.node: D1_v[start_:end_], self.mask: D2_v[start_:end_],
-                                                 self.edge: D3_v[start_:end_], self.proximity: D4_v[start_:end_],
-                                                 self.trn_flag: False})
-
-                valres=[]
-                for j in range(start_,end_):
-
-                    res = self.getRMS(MS_v[j], D5_batch[j-start_])
-
-                    valres.append(res)
-
-                valscores[i] = np.mean(valres)
-
-            valaggr[epoch] = np.mean(valscores)
             if not debug:
-                summary_writer.add_scalar("val/valscores", np.mean(valscores, 0), epoch)
-                summary_writer.add_scalar("val/min_valscores", np.min(valaggr[0:epoch+1]), epoch)
+                summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
+                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
+                summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
+                summary_writer.add_scalar("val/min_valscores_std", np.min(valaggr_std[0:epoch+1]), epoch)
 
-            print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
+            #print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
+            #print('::: training epoch id', epoch, ':: --- val mean {} std {} : ', valscores_mean, valscores_std, '--- min mean {} std {} : ', np.min(valaggr_mean[0:epoch+1]), flush=True)
+            print ('::: training epoch id :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
+                    valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
 
             if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
             # keep track of the best model as well in the separate checkpoint
             # it is done by copying the checkpoint
-            if valaggr[epoch] == np.min(valaggr[0:epoch+1]) and not debug:
+            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug:
                 for ckpt_f in glob.glob(save_path + '*'):
                     model_name_split = ckpt_f.split('/')
                     model_path = '/'.join(model_name_split[:-1])

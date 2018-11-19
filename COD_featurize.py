@@ -11,6 +11,8 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--virtual-node', action='store_true')
+parser.add_argument('--loaddir', type=str, default='./')
+parser.add_argument('--savedir', type=str, default='./')
 
 args = parser.parse_args()
 
@@ -85,7 +87,7 @@ if virtual_node:
     edge_dim += 1
 
 #[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'), encoding='bytes')
-[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'))
+[mollist, smilist] = pkl.load(open(args.loaddir+data+'_molset_all.p','rb'))
 
 D1 = []
 D2 = []
@@ -202,11 +204,11 @@ D3 = sparse.COO.from_numpy(D3)
 print([D1.nbytes, D3.nbytes])
 
 if virtual_node:
-    molvec_fname = data+'_molvec_'+str(n_max)+'_vn.p'
-    molset_fname = data + '_molset_' + str(n_max) + '_vn.p'
+    molvec_fname = args.savedir + data+'_molvec_'+str(n_max)+'_vn.p'
+    molset_fname = args.savedir + data + '_molset_' + str(n_max) + '_vn.p'
 else:
-    molvec_fname = data+'_molvec_'+str(n_max)+'.p'
-    molset_fname = data + '_molset_' + str(n_max) + '.p'
+    molvec_fname = args.savedir + data+'_molvec_'+str(n_max)+'.p'
+    molset_fname = args.savedir + data + '_molset_' + str(n_max) + '.p'
 
 print(molvec_fname)
 print(molset_fname)
