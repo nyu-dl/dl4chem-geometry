@@ -11,6 +11,8 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--virtual-node', action='store_true')
+parser.add_argument('--loaddir', type=str, default='./')
+parser.add_argument('--savedir', type=str, default='./')
 
 args = parser.parse_args()
 
@@ -20,7 +22,7 @@ def to_onehot(val, cat, etc=0):
     for ci, c in enumerate(cat):
         if val == c:
             onehot[ci]=1
-    
+
     if etc==1 and np.sum(onehot)==0:
         print(val)
 
@@ -35,27 +37,27 @@ def atomFeatures(a, ri, ri_a):
         for ring in rings:
             if aid in ring and len(ring) <= 8:
                 onehot[len(ring) - 3] += 1
-    
+
         return onehot
 
     v1 = to_onehot(a.GetSymbol(), ['C','N','O','F','Cl','Br','I','S','B','Si','P','Te','Se','Ge','As'], 1)
     v2 = to_onehot(a.GetHybridization(), [Chem.rdchem.HybridizationType.SP,Chem.rdchem.HybridizationType.SP2,Chem.rdchem.HybridizationType.SP3,Chem.rdchem.HybridizationType.SP3D,Chem.rdchem.HybridizationType.SP3D2], 1)
-    
+
     v3 = [a.GetAtomicNum(), a.GetDegree(), a.GetFormalCharge(), a.GetTotalNumHs(), int(a.GetIsAromatic())]
     v4 = _ringSize_a(a, ri_a)
-    
+
     v5 = np.zeros(3)
     try:
         tmp = to_onehot(a.GetProp('_CIPCode'), ['R','S'], 1)
         v5[0] = tmp[0]
-        v5[1] = tmp[1] 
+        v5[1] = tmp[1]
     except:
-        v5[2]=1 
-    
+        v5[2]=1
+
     v5 = v5[:2]
-          
+
     return np.concatenate([v1,v2,v3,v4,v5], axis=0)
- 
+
 
 def bondFeatures(bbs, ri, samering, shortpath):
 
@@ -65,14 +67,14 @@ def bondFeatures(bbs, ri, samering, shortpath):
         v3 = [int(bbs[0].GetIsConjugated()), shortpath]
     else:
         v1 = np.zeros(4)
-        v2 = np.zeros(4)  
-        v3 = [0, shortpath]  
-        
+        v2 = np.zeros(4)
+        v3 = [0, shortpath]
+
     v4 = samering
     v2 = v2[:3]
 
 
-    return np.concatenate([v1,v2,v3,v4], axis=0)       
+    return np.concatenate([v1,v2,v3,v4], axis=0)
 
 
 data='COD'
@@ -85,7 +87,8 @@ print(virtual_node, flush=True)
 if virtual_node:
     edge_dim += 1
 
-[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'), encoding='bytes')
+#[mollist, smilist] = pkl.load(open('./'+data+'_molset_all.p','rb'), encoding='bytes')
+[mollist, smilist] = pkl.load(open(args.loaddir+data+'_molset_all.p','rb'))
 
 D1 = []
 D2 = []
@@ -96,7 +99,8 @@ mollist2 = []
 smilist2 = []
 print(len(mollist), flush=True)
 for i in range(len(mollist)):
-    if i % 100 == 0: print(i, flush=True)
+    if i % 1000 == 0: print(i, flush=True)
+
     smi = smilist[i]
     mol = mollist[i]
 
@@ -106,18 +110,19 @@ for i in range(len(mollist)):
     if mol.GetNumHeavyAtoms() < n_min or mol.GetNumHeavyAtoms() > n_max:
         print('error')
         break
-    
+
     n = mol.GetNumAtoms()
     ri = mol.GetRingInfo()
     ri_a = ri.AtomRings()
-    
+
     pos = mol.GetConformer().GetPositions()
+
     if virtual_node:
         pos = np.vstack([pos, np.zeros(3)])
         assert n == pos.shape[0] - 1
     else:
         assert n==pos.shape[0]
-    
+
     mollist2.append(mol)
     smilist2.append(smi)
 
@@ -127,7 +132,7 @@ for i in range(len(mollist)):
     else:
         node = np.zeros((n_max, atom_dim))
         mask = np.zeros((n_max, 1))
-    
+
     for j in range(n):
         atom = mol.GetAtomWithIdx(j)
         node[j, :]=atomFeatures(atom, ri, ri_a)
@@ -154,6 +159,7 @@ for i in range(len(mollist)):
                     samering[len(alist) - 3] += 1
 
             bond = [mol.GetBondBetweenAtoms(molpath[mm], molpath[mm+1]) for mm in range(shortpath)]
+
             if virtual_node:
                 edge[j, k, :] = np.pad(bondFeatures(bond, ri, samering, shortpath), (1, 0), 'constant')
                 edge[k, j, :] = edge[j, k, :]
@@ -179,7 +185,7 @@ for i in range(len(mollist)):
     D3.append(np.array(edge, dtype=int))
     D4.append(np.array(proximity))
     D5.append(np.array(pos2))
-    
+
     #if len(D1)==66000:
     #    break
 
@@ -199,11 +205,11 @@ D3 = sparse.COO.from_numpy(D3)
 print([D1.nbytes, D3.nbytes])
 
 if virtual_node:
-    molvec_fname = data+'_molvec_'+str(n_max)+'_vn.p'
-    molset_fname = data + '_molset_' + str(n_max) + '_vn.p'
+    molvec_fname = args.savedir + data+'_molvec_'+str(n_max)+'_vn.p'
+    molset_fname = args.savedir + data + '_molset_' + str(n_max) + '_vn.p'
 else:
-    molvec_fname = data+'_molvec_'+str(n_max)+'.p'
-    molset_fname = data + '_molset_' + str(n_max) + '.p'
+    molvec_fname = args.savedir + data+'_molvec_'+str(n_max)+'.p'
+    molset_fname = args.savedir + data + '_molset_' + str(n_max) + '.p'
 
 print(molvec_fname)
 print(molset_fname)
