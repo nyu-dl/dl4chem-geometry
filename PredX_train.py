@@ -8,6 +8,7 @@ import PredX_MPNN as MPNN
 import sparse
 import argparse
 import getpass
+import pdb
 parser = argparse.ArgumentParser(description='Train network')
 
 parser.add_argument('--data', type=str, default='QM9', choices=['COD','QM9'])
@@ -30,8 +31,8 @@ parser.add_argument('--batch-size', type=int, default=20, help='batch size')
 parser.add_argument('--val-num-samples', type=int, default=10, help='number of samples from prior used for validation')
 parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
 parser.add_argument('--w-reg', type=float, default=1e-3, help='weight for conditional prior regularization')
-parser.add_argument('--use-X', type=float, default=True, help='use X as input for posterior of Z')
-parser.add_argument('--use-R', type=float, default=True, help='use R(X) as input for posterior of Z')
+parser.add_argument('--use-X', action='store_true', default=False, help='use X as input for posterior of Z')
+parser.add_argument('--use-R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
 
 args = parser.parse_args()
 
