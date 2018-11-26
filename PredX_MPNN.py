@@ -13,13 +13,19 @@ import rmsd
 import glob
 import os
 import shutil
+import pickle as pkl
 
 class Model(object):
 
     def __init__(self, data, n_max, dim_node, dim_edge, dim_h, dim_f, \
                 batch_size, val_num_samples, \
                 mpnn_steps=5, alignment_type='default', tol=1e-5, \
-                use_X=True, use_R=True, virtual_node=False):
+                use_X=True, use_R=True, virtual_node=False, seed=0, \
+                refine_steps=0):
+
+        # set random seed
+        np.random.seed(seed)
+        tf.set_random_seed(seed)
 
         # hyper-parameters
         self.data = data
@@ -28,6 +34,7 @@ class Model(object):
         self.val_num_samples = val_num_samples
         self.tol = tol
         self.virtual_node = virtual_node
+        self.refine_steps = refine_steps
 
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
@@ -86,6 +93,13 @@ class Model(object):
         self.X_hidden = self._MPNN(self.X_edge_wgt, self.postZ_sample + self.node_embed, name = 'postX', reuse = False)
         self.X_pred = self._g_nn(self.X_hidden, self.node_embed, 3, name = 'postX', reuse = False, mask=mask)
 
+        # p(X|Z,G) -- posterior of X without sampling from latent space
+        # used for iterative refinement of predictions
+        # det stands for deterministic
+        self.X_edge_wgt_det = self._edge_nn(self.edge_2, name = 'postX', reuse = True) #[batch_size, n_max, n_max, dim_h, dim_h]
+        self.X_hidden_det = self._MPNN(self.X_edge_wgt_det, self.postZ_mu + self.node_embed, name = 'postX', reuse = True)
+        self.X_pred_det = self._g_nn(self.X_hidden_det, self.node_embed, 3, name = 'postX', reuse = True, mask=mask)
+
         # Prediction of X with p(Z|G) in the test phase
         self.PX_edge_wgt = self._edge_nn(self.edge_2, name = 'postX', reuse = True) #[batch_size, n_max, n_max, dim_h, dim_h]
         self.PX_hidden = self._MPNN(self.PX_edge_wgt, self.priorZ_sample + self.node_embed, name = 'postX', reuse = True)
@@ -95,7 +109,8 @@ class Model(object):
         self.sess = tf.Session()
 
 
-    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, tm_v=None, debug=False):
+    def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, \
+                tm_v=None, debug=False, savepred_path=None):
         if load_path is not None:
             self.saver.restore( self.sess, load_path )
 
@@ -110,6 +125,9 @@ class Model(object):
         valscores_mean = np.zeros(val_size)
         valscores_std = np.zeros(val_size)
 
+        if savepred_path != None:
+            pred_v = np.zeros((len(D1_v), self.val_num_samples, self.n_max, 3))
+
         print ("testing model...")
         for i in range(n_batch_val):
             if debug:
@@ -122,18 +140,24 @@ class Model(object):
             edge_val = np.repeat(D3_v[start_:end_], self.val_num_samples, axis=0)
             proximity_val = np.repeat(D4_v[start_:end_], self.val_num_samples, axis=0)
 
-            if self.virtual_node:
-                true_masks_val = np.repeat(tm_v[start_:end_], self.val_num_samples, axis=0)
-                D5_batch = self.sess.run(self.PX_pred,
-                                         feed_dict={self.node: node_val, self.mask: mask_val,
-                                                    self.edge: edge_val, self.proximity: proximity_val,
-                                                    self.true_masks: true_masks_val, self.trn_flag: False})
+            dict_val = {self.node: node_val, self.mask:mask_val, self.edge:edge_val, \
+                        self.proximity: proximity_val, self.trn_flag: False }
 
+            if self.virtual_node:
+                dict_val[self.true_masks] = true_masks_val
+                true_masks_val = np.repeat(tm_v[start_:end_], self.val_num_samples, axis=0)
+                D5_batch = self.sess.run(self.PX_pred, feed_dict=dict_val)
             else:
-                D5_batch = self.sess.run(self.PX_pred,
-                                feed_dict = {self.node: node_val, self.mask: mask_val,
-                                             self.edge: edge_val, self.proximity: proximity_val,
-                                             self.trn_flag: False})
+                D5_batch = self.sess.run(self.PX_pred, feed_dict=dict_val)
+
+            if savepred_path != None:
+                pred_v[start_:end_] = D5_batch.reshape(val_batch_size, self.val_num_samples, self.n_max, 3)
+
+            # iterative refinement of posterior
+            for r in range(self.refine_steps):
+                dict_val[self.pos] = D5_batch
+                D5_batch = self.sess.run(self.X_pred_det, feed_dict=dict_val)
+
             valres=[]
             for j in range(D5_batch.shape[0]):
                 ms_v_index = int(j / self.val_num_samples) + start_
@@ -149,6 +173,9 @@ class Model(object):
             valscores_std[start_:end_] = valres_std
 
         print ("val scores: mean is {} , std is {}".format(np.mean(valscores_mean), np.mean(valscores_std)))
+        if savepred_path != None:
+            print ("saving neural net predictions into {}".format(savepred_path))
+            pkl.dump(pred_v, open(savepred_path, 'wb'))
         return np.mean(valscores_mean), np.mean(valscores_std)
 
     def getRMS(self, prb_mol, ref_pos, useFF=False):
@@ -270,8 +297,8 @@ class Model(object):
 
             #print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
             #print('::: training epoch id', epoch, ':: --- val mean {} std {} : ', valscores_mean, valscores_std, '--- min mean {} std {} : ', np.min(valaggr_mean[0:epoch+1]), flush=True)
-            print ('::: training epoch id :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
-                    valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
+            print ('::: training epoch id {} :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
+                    epoch, valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
 
             if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )

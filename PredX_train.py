@@ -8,20 +8,23 @@ import PredX_MPNN as MPNN
 import sparse
 import argparse
 import getpass
-parser = argparse.ArgumentParser(description='Train student network')
+parser = argparse.ArgumentParser(description='Train network')
 
 parser.add_argument('--data', type=str, default='QM9', choices=['COD','QM9'])
 parser.add_argument('--ckptdir', type=str, default='./checkpoints/')
 parser.add_argument('--eventdir', type=str, default='./events/')
+parser.add_argument('--savepreddir', type=str, default=None, help='path where predictions of the network are save')
 parser.add_argument('--loaddir', type=str, default=None)
-parser.add_argument('--model-name', type=str, default='test')
+parser.add_argument('--model-name', type=str, default='neuralnet')
 parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default','linear','kabsch'])
-parser.add_argument('--virtual-node', action='store_true')
+parser.add_argument('--virtual-node', action='store_true', help='use virtual node')
+parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
 parser.add_argument('--debug', action='store_true', help='debug mode')
 parser.add_argument('--test', action='store_true', help='test mode')
 parser.add_argument('--use-val', action='store_true', help='use validation set')
 parser.add_argument('--dim-h', type=int, default=50, help='dimension of the hidden')
 parser.add_argument('--dim-f', type=int, default=100, help='dimension of the hidden')
+parser.add_argument('--seed', type=int, default=1334, help='random seed for experiments')
 parser.add_argument('--mpnn-steps', type=int, default=5, help='number of mpnn steps')
 parser.add_argument('--batch-size', type=int, default=20, help='batch size')
 parser.add_argument('--val-num-samples', type=int, default=10, help='number of samples from prior used for validation')
@@ -63,6 +66,11 @@ dim_h = args.dim_h
 dim_f = args.dim_f
 batch_size = args.batch_size
 val_num_samples = args.val_num_samples
+
+if not os.path.exists(args.ckptdir):
+    os.makedirs(args.ckptdir)
+if not os.path.exists(args.eventdir):
+    os.makedirs(args.eventdir)
 
 save_path = os.path.join(args.ckptdir, args.model_name + '_model.ckpt')
 event_path = os.path.join(args.eventdir, args.model_name)
@@ -128,7 +136,9 @@ print(D1_trn.shape, D3_trn.shape)
 model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, \
                     batch_size, val_num_samples, \
                     mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
-                    use_X=args.use_X, use_R=args.use_R, virtual_node=args.virtual_node)
+                    use_X=args.use_X, use_R=args.use_R, \
+                    virtual_node=args.virtual_node, seed=args.seed, \
+                    refine_steps=args.refine_steps)
 
 #if args.loaddir != None:
 #    model.saver.restore(model.sess, args.loaddir)
@@ -137,10 +147,12 @@ with model.sess:
     if args.test:
         if args.use_val:
             model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
-                        load_path=args.loaddir, tm_v=tm_val, debug=args.debug)
+                        load_path=args.loaddir, tm_v=tm_val, debug=args.debug, \
+                        savepred_path=args.savepreddir)
         else:
             model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, \
-                        load_path=args.loaddir, tm_v=tm_tst, debug=args.debug)
+                        load_path=args.loaddir, tm_v=tm_tst, debug=args.debug, \
+                        savepred_path=args.savepreddir)
     else:
         model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                     D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
