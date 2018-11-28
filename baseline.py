@@ -46,7 +46,8 @@ print (':::{}'.format("val" if args.use_val else "test"))
 uff = []
 mmff = []
 for t in range(nmols):
-    print (t, nmols, molsmi[t])
+    if t % 10 == 0 :
+        print (t, nmols, molsmi[t])
     mol_ref=copy.deepcopy(suppl[t])
 
     Chem.rdmolops.AssignAtomChiralTagsFromStructure(mol_ref)
@@ -56,35 +57,43 @@ for t in range(nmols):
 
     n_est = mol_ref.GetNumHeavyAtoms()
 
-    ttest = []
+    ttest_uff = []
+    ttest_mmff = []
     for repid in range(10):
-        for _ in range(5):
-            try:
-                mol_init_1=Chem.AddHs(mol_ref)
-                mol_init_1.RemoveConformer(0)
-                AllChem.EmbedMolecule(mol_init_1)
-
-                ## baseline force field part
-                mol_baseUFF = copy.deepcopy(mol_init_1)
-                AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, confId=0)
-                mol_baseUFF=Chem.RemoveHs(mol_baseUFF)
-                RMS_UFF = AllChem.AlignMol(mol_baseUFF, mol_ref)
-
-                mol_baseMMFF = copy.deepcopy(mol_init_1)
-                AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, confId=0)
-                mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
-                RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref)
-
-                ttest.append([n_est, RMS_UFF, RMS_MMFF])
-                break
-            except:
-                continue
-
-    print (len(ttest))
-    if len(ttest) > 0:
-        mean_ttest, std_ttest = np.mean(ttest, 0), np.std(ttest, 0)
-        uff.append([mean_ttest[1], std_ttest[1]])
-        mmff.append([mean_ttest[2], std_ttest[2]])
+        mol_init_1=Chem.AddHs(mol_ref)
+        mol_init_1.RemoveConformer(0)
+        AllChem.EmbedMolecule(mol_init_1)
+        
+        try:
+            ## baseline force field part with UFF
+            mol_baseUFF = copy.deepcopy(mol_init_1)
+            AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, confId=0)
+            mol_baseUFF=Chem.RemoveHs(mol_baseUFF)
+            RMS_UFF = AllChem.AlignMol(mol_baseUFF, mol_ref)
+            
+            ttest_uff.append([n_est, RMS_UFF])
+        except:
+            continue
+            
+        try:
+            ## baseline force field part with MMFF
+            mol_baseMMFF = copy.deepcopy(mol_init_1)
+            AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, confId=0)
+            mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
+            RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref)
+            
+            ttest_mmff.append([n_est, RMS_MMFF])
+        except:
+            continue
+            
+    #print (len(ttest))
+    if len(ttest_uff) > 0:
+        mean_ttest, std_ttest = np.mean(ttest_uff, 0), np.std(ttest_uff, 0)
+        uff.append([mean_ttest[1], std_ttest[1], len(ttest_uff)])
+        
+    if len(ttest_mmff) > 0:
+        mean_ttest, std_ttest = np.mean(ttest_mmff, 0), np.std(ttest_mmff, 0)
+        mmff.append([mean_ttest[1], std_ttest[1], len(ttest_mmff)])
 
 print ("UFF results")
 print (np.mean(np.array(uff)[:,0]), np.mean(np.array(uff)[:,1]))
