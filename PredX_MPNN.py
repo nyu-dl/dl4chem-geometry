@@ -211,10 +211,10 @@ class Model(object):
 
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
             load_path = None, save_path = None, event_path = None, tm_trn=None, tm_val=None,
-            w_reg=1e-3, debug=False):
+            w_reg=1e-3, debug=False, exp=None):
 
         # SummaryWriter
-        if not debug:
+        if not debug and exp is None:
             summary_writer = SummaryWriter(event_path)
 
         # objective functions
@@ -272,7 +272,7 @@ class Model(object):
 
                 # log results
                 curr_iter = epoch * n_batch + i
-                if not debug:
+                if not debug and exp is None:
                     summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
                     summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
                     summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
@@ -282,6 +282,9 @@ class Model(object):
                 trnscores[i,:] = trnresult
 
             print(np.mean(trnscores,0), flush=True)
+            if exp is not None:
+                exp.log({'training epoch id': epoch})
+                exp.log({'train_score': np.mean(trnscores,0)})
 
             valscores_mean, valscores_std = self.test(D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, \
                                             load_path=None, tm_v=tm_val, debug=debug)
@@ -289,9 +292,9 @@ class Model(object):
             valaggr_mean[epoch] = valscores_mean
             valaggr_std[epoch] = valscores_std
 
-            if not debug:
+            if not debug and exp is None:
                 summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
-                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
+                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epo8ch)
                 summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
                 summary_writer.add_scalar("val/min_valscores_std", np.min(valaggr_std[0:epoch+1]), epoch)
 
@@ -299,6 +302,11 @@ class Model(object):
             #print('::: training epoch id', epoch, ':: --- val mean {} std {} : ', valscores_mean, valscores_std, '--- min mean {} std {} : ', np.min(valaggr_mean[0:epoch+1]), flush=True)
             print ('::: training epoch id {} :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
                     epoch, valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
+            if exp is not None:
+                exp.log({'val mean': valscores_mean})
+                exp.log({'std': valscores_std})
+                exp.log({'best val mean': np.min(valaggr_mean[0:epoch+1])})
+                exp.log({'std of best val mean': np.min(valaggr_std[0:epoch+1])})
 
             if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
