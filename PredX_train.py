@@ -19,111 +19,6 @@ def data_path():
         return "./"
 
 def train(args, exp=None):
-    model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, \
-                        batch_size, val_num_samples, \
-                        mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
-                        use_X=args.use_X, use_R=args.use_R, \
-                        virtual_node=args.virtual_node, seed=args.seed, \
-                        refine_steps=args.refine_steps)
-
-    #if args.loaddir != None:
-    #    model.saver.restore(model.sess, args.loaddir)
-
-    with model.sess:
-        if args.test:
-            if args.use_val:
-                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
-                            load_path=args.loaddir, tm_v=tm_val, debug=args.debug, \
-                            savepred_path=args.savepreddir)
-            else:
-                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, \
-                            load_path=args.loaddir, tm_v=tm_tst, debug=args.debug, \
-                            savepred_path=args.savepreddir)
-        else:
-            model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
-                        D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
-                        load_path=args.loaddir, save_path=save_path, event_path=event_path, \
-                        tm_trn=tm_trn, tm_val=tm_val, \
-                        w_reg=args.w_reg, \
-                        debug=args.debug, exp=exp)
-
-def search_train(args):
-    exp = Experiment(
-        # Location to save the metrics.
-        save_dir=args.ckptdir
-    )
-    exp.argparse(args)
-    train(args)
-    exp.save()
-
-
-
-if __name__ == '__main__':
-
-    hyperparameter_search = True
-    if hyperparameter_search:
-        parser = HyperOptArgumentParser(strategy='random_search')
-    else:
-        parser = argparse.ArgumentParser(description='Train network')
-
-    parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9'])
-    parser.add_argument('--ckptdir', type=str, default='./checkpoints/')
-    parser.add_argument('--eventdir', type=str, default='./events/')
-    parser.add_argument('--savepreddir', type=str, default=None,
-                        help='path where predictions of the network are save')
-    parser.add_argument('--loaddir', type=str, default=None)
-    parser.add_argument('--model-name', type=str, default='neuralnet')
-    parser.add_argument('--alignment-type', type=str, default='kabsch', choices=['default', 'linear', 'kabsch'])
-    parser.add_argument('--virtual-node', action='store_true', help='use virtual node')
-    parser.add_argument('--debug', action='store_true', help='debug mode')
-    parser.add_argument('--test', action='store_true', help='test mode')
-    parser.add_argument('--use-val', action='store_true', help='use validation set')
-    parser.add_argument('--seed', type=int, default=1334, help='random seed for experiments')
-    parser.add_argument('--batch-size', type=int, default=20, help='batch size')
-    parser.add_argument('--val-num-samples', type=int, default=10,
-                        help='number of samples from prior used for validation')
-    parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
-    parser.add_argument('--use-X', action='store_true', default=False, help='use X as input for posterior of Z')
-    parser.add_argument('--use-R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
-
-    if hyperparameter_search:
-        parser.add_argument('--nb-trials', type=int, default=5, help='number of hyperparameter combinations')
-        parser.opt_range('--refine_steps', type=int, default=0, low=0, high=3, tunable=True,
-                            help='number of refinement steps if requested')
-        parser.opt_list('--dim-h', type=int, default=50, options=[50, 100, 200], tunable=True,
-                            help='dimension of the hidden')
-        parser.opt_list('--dim-f', type=int, default=100, options=[50, 100, 200], tunable=True,
-                            help='dimension of the hidden')
-        parser.opt_range('--mpnn-steps', type=int, default=5, low=0, high=5, tunable=True,
-                            help='number of mpnn steps')
-        parser.opt_range('--w-reg', type=float, default=1e-3, low=1e-3, high=1e-1, tunable=True,
-                            help='weight for conditional prior regularization')
-        parser.add_argument('--condaenv-path', type=str)
-
-        args = parser.parse_args()
-        cluster = SlurmCluster(
-            hyperparam_optimizer=args,
-            log_path=args.ckptdir,
-            python_cmd='python3'
-        )
-        # we'll request 10GB of memory per node
-        cluster.memory_mb_per_node = 10000
-
-        # set walltime
-        cluster.job_time = '96:00:00'
-
-        cluster.load_modules(['cuda/9.0.176', 'cudnn/9.0v7.0.5'])
-        cluster.add_command('source activate {}'.format(args.condaenv_path))
-
-    else:
-
-        parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
-        parser.add_argument('--dim-h', type=int, default=50, help='dimension of the hidden')
-        parser.add_argument('--dim-f', type=int, default=100, help='dimension of the hidden')
-        parser.add_argument('--mpnn-steps', type=int, default=5, help='number of mpnn steps')
-        parser.add_argument('--w-reg', type=float, default=1e-3, help='weight for conditional prior regularization')
-
-        args = parser.parse_args()
 
     if args.data == 'COD':
         n_max = 50
@@ -217,7 +112,112 @@ if __name__ == '__main__':
     print ('::: num train samples is ')
     print(D1_trn.shape, D3_trn.shape)
 
+    model = MPNN.Model(args.data, n_max, dim_node, dim_edge, dim_h, dim_f, \
+                        batch_size, val_num_samples, \
+                        mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
+                        use_X=args.use_X, use_R=args.use_R, \
+                        virtual_node=args.virtual_node, seed=args.seed, \
+                        refine_steps=args.refine_steps)
+    #if args.loaddir != None:
+    #    model.saver.restore(model.sess, args.loaddir)
+
+    with model.sess:
+        if args.test:
+            if args.use_val:
+                model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
+                            load_path=args.loaddir, tm_v=tm_val, debug=args.debug, \
+                            savepred_path=args.savepreddir)
+            else:
+                model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, \
+                            load_path=args.loaddir, tm_v=tm_tst, debug=args.debug, \
+                            savepred_path=args.savepreddir)
+        else:
+            model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
+                        D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
+                        load_path=args.loaddir, save_path=save_path, event_path=event_path, \
+                        tm_trn=tm_trn, tm_val=tm_val, \
+                        w_reg=args.w_reg, \
+                        debug=args.debug, exp=exp)
+
+def search_train(args, *extra_args):
+    exp = Experiment(
+        # Location to save the metrics.
+        save_dir=args.ckptdir
+    )
+    exp.argparse(args)
+    train(args)
+    exp.save()
+
+
+
+if __name__ == '__main__':
+
+    hyperparameter_search = True
     if hyperparameter_search:
-        cluster.optimize_parallel_cluster_gpu(train, nb_trials=args.nb_trials, job_name='dl4chem_random_search')
+        parser = HyperOptArgumentParser(strategy='random_search')
+    else:
+        parser = argparse.ArgumentParser(description='Train network')
+
+    parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9'])
+    parser.add_argument('--ckptdir', type=str, default='./checkpoints/')
+    parser.add_argument('--eventdir', type=str, default='./events/')
+    parser.add_argument('--savepreddir', type=str, default=None,
+                        help='path where predictions of the network are save')
+    parser.add_argument('--loaddir', type=str, default=None)
+    parser.add_argument('--model_name', type=str, default='neuralnet')
+    parser.add_argument('--alignment_type', type=str, default='kabsch', choices=['default', 'linear', 'kabsch'])
+    parser.add_argument('--virtual_node', action='store_true', help='use virtual node')
+    parser.add_argument('--debug', action='store_true', help='debug mode')
+    parser.add_argument('--test', action='store_true', help='test mode')
+    parser.add_argument('--use_val', action='store_true', help='use validation set')
+    parser.add_argument('--seed', type=int, default=1334, help='random seed for experiments')
+    parser.add_argument('--batch_size', type=int, default=20, help='batch size')
+    parser.add_argument('--val_num_samples', type=int, default=10,
+                        help='number of samples from prior used for validation')
+    parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
+    parser.add_argument('--use_X', action='store_true', default=False, help='use X as input for posterior of Z')
+    parser.add_argument('--use_R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
+
+    if hyperparameter_search:
+        parser.add_argument('--nb_trials', type=int, default=5, help='number of hyperparameter combinations')
+        parser.opt_list('--refine_steps', type=int, default=0, options=[0, 1, 2, 3], tunable=True,
+                            help='number of refinement steps if requested')
+        parser.opt_list('--dim_h', type=int, default=50, options=[50, 100, 200], tunable=True,
+                            help='dimension of the hidden')
+        parser.opt_list('--dim_f', type=int, default=100, options=[50, 100, 200], tunable=True,
+                            help='dimension of the hidden')
+        parser.opt_list('--mpnn_steps', type=int, default=5, options=[0, 1, 2, 3, 4, 5], tunable=True,
+                            help='number of mpnn steps')
+        parser.opt_range('--w_reg', type=float, default=1e-3, low=1e-5, high=1e-1, tunable=True,
+                            help='weight for conditional prior regularization')
+        parser.add_argument('--condaenv_path', type=str)
+
+        args = parser.parse_args()
+        cluster = SlurmCluster(
+            hyperparam_optimizer=args,
+            log_path=args.ckptdir,
+            python_cmd='python3'
+        )
+        # we'll request 10GB of memory per node
+        cluster.memory_mb_per_node = 10000
+
+        # set walltime
+        cluster.job_time = '96:00:00'
+
+        cluster.load_modules(['cuda/9.0.176', 'cudnn/9.0v7.0.5'])
+        cluster.add_command('source activate {}'.format(args.condaenv_path))
+        cluster.add_command('alias python={}'.format(args.condaenv_path))
+    else:
+
+        parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
+        parser.add_argument('--dim_h', type=int, default=50, help='dimension of the hidden')
+        parser.add_argument('--dim_f', type=int, default=100, help='dimension of the hidden')
+        parser.add_argument('--mpnn_steps', type=int, default=5, help='number of mpnn steps')
+        parser.add_argument('--w_reg', type=float, default=1e-3, help='weight for conditional prior regularization')
+
+        args = parser.parse_args()
+
+    if hyperparameter_search:
+        cluster.optimize_parallel_cluster_gpu(search_train, nb_trials=args.nb_trials, job_name='dl4chem_random_search')
     else:
         train(args)

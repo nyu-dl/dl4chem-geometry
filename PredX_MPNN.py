@@ -144,8 +144,8 @@ class Model(object):
                         self.proximity: proximity_val, self.trn_flag: False }
 
             if self.virtual_node:
-                dict_val[self.true_masks] = true_masks_val
                 true_masks_val = np.repeat(tm_v[start_:end_], self.val_num_samples, axis=0)
+                dict_val[self.true_masks] = true_masks_val
                 D5_batch = self.sess.run(self.PX_pred, feed_dict=dict_val)
             else:
                 D5_batch = self.sess.run(self.PX_pred, feed_dict=dict_val)
@@ -307,12 +307,13 @@ class Model(object):
                 exp.log({'std': valscores_std})
                 exp.log({'best val mean': np.min(valaggr_mean[0:epoch+1])})
                 exp.log({'std of best val mean': np.min(valaggr_std[0:epoch+1])})
+                exp.save()
 
-            if save_path is not None and not debug:
+            if save_path is not None and not debug and exp is None:
                 self.saver.save( self.sess, save_path )
             # keep track of the best model as well in the separate checkpoint
             # it is done by copying the checkpoint
-            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug:
+            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug and exp is None:
                 for ckpt_f in glob.glob(save_path + '*'):
                     model_name_split = ckpt_f.split('/')
                     model_path = '/'.join(model_name_split[:-1])
