@@ -294,7 +294,7 @@ class Model(object):
 
             if not debug and exp is None:
                 summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
-                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epo8ch)
+                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
                 summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
                 summary_writer.add_scalar("val/min_valscores_std", np.min(valaggr_std[0:epoch+1]), epoch)
 

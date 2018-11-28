@@ -145,7 +145,7 @@ def search_train(args, *extra_args):
         save_dir=args.ckptdir
     )
     exp.argparse(args)
-    train(args)
+    train(args, exp)
     exp.save()
 
 
