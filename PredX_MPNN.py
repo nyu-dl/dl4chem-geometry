@@ -233,7 +233,7 @@ class Model(object):
             print(save_path, flush=True)
             print(event_path, flush=True)
         # SummaryWriter
-        if not debug and exp is None:
+        if not debug:
             summary_writer = SummaryWriter(event_path)
 
         # objective functions

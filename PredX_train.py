@@ -188,12 +188,12 @@ if __name__ == '__main__':
                             help='dimension of the hidden')
         parser.opt_list('--mpnn_steps', type=int, default=5, options=[2, 3, 4, 5], tunable=True,
                             help='number of mpnn steps')
-        parser.opt_range('--w_reg', type=float, default=1e-3, options=[1e-1, 1e-3, 1e-5, 0], tunable=True,
+        parser.opt_list('--w_reg', type=float, default=1e-3, options=[1e-1, 1e-3, 1e-5, 0], tunable=True,
                             help='weight for conditional prior regularization')
         parser.add_argument('--condaenv_path', type=str)
 
-        #args = parser.parse_args()
-        args, unknown = parser.parse_known_args()
+        args = parser.parse_args()
+        #args, unknown = parser.parse_known_args()
         cluster = SlurmCluster(
             hyperparam_optimizer=args,
             log_path=args.ckptdir,
