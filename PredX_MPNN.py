@@ -282,9 +282,10 @@ class Model(object):
                 trnscores[i,:] = trnresult
 
             print(np.mean(trnscores,0), flush=True)
+            exp_dict = {}
             if exp is not None:
-                exp.log({'training epoch id': epoch})
-                exp.log({'train_score': np.mean(trnscores,0)})
+                exp_dict['training epoch id'] = epoch
+                exp_dict['train_score'] = np.mean(trnscores,0)
 
             valscores_mean, valscores_std = self.test(D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, \
                                             load_path=None, tm_v=tm_val, debug=debug)
@@ -303,10 +304,11 @@ class Model(object):
             print ('::: training epoch id {} :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
                     epoch, valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
             if exp is not None:
-                exp.log({'val mean': valscores_mean})
-                exp.log({'std': valscores_std})
-                exp.log({'best val mean': np.min(valaggr_mean[0:epoch+1])})
-                exp.log({'std of best val mean': np.min(valaggr_std[0:epoch+1])})
+                exp_dict['val mean'] = valscores_mean
+                exp_dict['std'] = valscores_std
+                exp_dict['best val mean'] = np.min(valaggr_mean[0:epoch+1])
+                exp_dict['std of best val mean'] = np.min(valaggr_std[0:epoch+1])
+                exp.log(exp_dict)
                 exp.save()
 
             if save_path is not None and not debug and exp is None:
