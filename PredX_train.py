@@ -117,7 +117,7 @@ def train(args, exp=None):
                         mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
                         use_X=args.use_X, use_R=args.use_R, \
                         virtual_node=args.virtual_node, seed=args.seed, \
-                        refine_steps=args.refine_steps)
+                        refine_steps=args.refine_steps, refine_mom=args.refine_mom)
     #if args.loaddir != None:
     #    model.saver.restore(model.sess, args.loaddir)
 
@@ -152,7 +152,7 @@ def search_train(args, *extra_args):
 
 if __name__ == '__main__':
 
-    hyperparameter_search = True
+    hyperparameter_search = False
     if hyperparameter_search:
         parser = HyperOptArgumentParser(strategy='random_search')
     else:
@@ -177,22 +177,23 @@ if __name__ == '__main__':
     parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
     parser.add_argument('--use_X', action='store_true', default=False, help='use X as input for posterior of Z')
     parser.add_argument('--use_R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
+    parser.add_argument('--refine_mom', type=float, default=0.99, help='momentum used for refinement')
+    parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
 
     if hyperparameter_search:
         parser.add_argument('--nb_trials', type=int, default=5, help='number of hyperparameter combinations')
-        parser.opt_list('--refine_steps', type=int, default=0, options=[0, 1, 2, 3], tunable=True,
-                            help='number of refinement steps if requested')
         parser.opt_list('--dim_h', type=int, default=50, options=[50, 100, 200], tunable=True,
                             help='dimension of the hidden')
         parser.opt_list('--dim_f', type=int, default=100, options=[50, 100, 200], tunable=True,
                             help='dimension of the hidden')
-        parser.opt_list('--mpnn_steps', type=int, default=5, options=[0, 1, 2, 3, 4, 5], tunable=True,
+        parser.opt_list('--mpnn_steps', type=int, default=5, options=[2, 3, 4, 5], tunable=True,
                             help='number of mpnn steps')
-        parser.opt_range('--w_reg', type=float, default=1e-3, low=1e-5, high=1e-1, tunable=True,
+        parser.opt_range('--w_reg', type=float, default=1e-3, options=[1e-1, 1e-3, 1e-5, 0], tunable=True,
                             help='weight for conditional prior regularization')
         parser.add_argument('--condaenv_path', type=str)
 
-        args = parser.parse_args()
+        #args = parser.parse_args()
+        args, unknown = parser.parse_known_args()
         cluster = SlurmCluster(
             hyperparam_optimizer=args,
             log_path=args.ckptdir,
@@ -208,8 +209,6 @@ if __name__ == '__main__':
         cluster.add_command('source activate {}'.format(args.condaenv_path))
         cluster.add_command('alias python={}'.format(args.condaenv_path))
     else:
-
-        parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
         parser.add_argument('--dim_h', type=int, default=50, help='dimension of the hidden')
         parser.add_argument('--dim_f', type=int, default=100, help='dimension of the hidden')
         parser.add_argument('--mpnn_steps', type=int, default=5, help='number of mpnn steps')
