@@ -213,6 +213,11 @@ class Model(object):
             load_path = None, save_path = None, event_path = None, tm_trn=None, tm_val=None,
             w_reg=1e-3, debug=False, exp=None):
 
+        if exp is not None:
+            save_path = exp.get_data_path(exp.name, exp.version)
+            event_path = os.path.join(save_path, 'event')
+            print(save_path, flush=True)
+            print(event_path, flush=True)
         # SummaryWriter
         if not debug and exp is None:
             summary_writer = SummaryWriter(event_path)
@@ -272,7 +277,7 @@ class Model(object):
 
                 # log results
                 curr_iter = epoch * n_batch + i
-                if not debug and exp is None:
+                if not debug:
                     summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
                     summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
                     summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
@@ -292,7 +297,7 @@ class Model(object):
             valaggr_mean[epoch] = valscores_mean
             valaggr_std[epoch] = valscores_std
 
-            if not debug and exp is None:
+            if not debug:
                 summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
                 summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
                 summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
@@ -309,11 +314,11 @@ class Model(object):
                 exp.log({'std of best val mean': np.min(valaggr_std[0:epoch+1])})
                 exp.save()
 
-            if save_path is not None and not debug and exp is None:
+            if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
             # keep track of the best model as well in the separate checkpoint
             # it is done by copying the checkpoint
-            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug and exp is None:
+            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug:
                 for ckpt_f in glob.glob(save_path + '*'):
                     model_name_split = ckpt_f.split('/')
                     model_path = '/'.join(model_name_split[:-1])
