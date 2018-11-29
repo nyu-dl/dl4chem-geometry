@@ -11,6 +11,7 @@ from tf_rmsd import tf_centroid, tf_centroid_masked, tf_kabsch_rmsd_masked, tf_k
 import pdb
 import rmsd
 import glob
+import copy
 import os
 import shutil
 import pickle as pkl
@@ -21,7 +22,7 @@ class Model(object):
                 batch_size, val_num_samples, \
                 mpnn_steps=5, alignment_type='default', tol=1e-5, \
                 use_X=True, use_R=True, virtual_node=False, seed=0, \
-                refine_steps=0):
+                refine_steps=0, refine_mom=0.99):
 
         # set random seed
         np.random.seed(seed)
@@ -35,6 +36,9 @@ class Model(object):
         self.tol = tol
         self.virtual_node = virtual_node
         self.refine_steps = refine_steps
+        self.refine_mom = refine_mom
+        self.use_X = use_X
+        self.use_R = use_R
 
         if alignment_type == 'linear':
             self.msd_func = self.linear_transform_msd
@@ -53,6 +57,7 @@ class Model(object):
         self.mask = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1]) # node yes = 1, no = 0
         self.edge = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max, self.dim_edge])
         self.pos = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 3])
+        self.pos_to_proximity = self._pos_to_proximity(self.pos)
         self.proximity = tf.placeholder(tf.float32, [self.batch_size, self.n_max, self.n_max])
         if self.virtual_node:
             self.true_masks = tf.placeholder(tf.float32, [self.batch_size, self.n_max, 1])
@@ -141,7 +146,7 @@ class Model(object):
             proximity_val = np.repeat(D4_v[start_:end_], self.val_num_samples, axis=0)
 
             dict_val = {self.node: node_val, self.mask:mask_val, self.edge:edge_val, \
-                        self.proximity: proximity_val, self.trn_flag: False }
+                        self.trn_flag: False }
 
             if self.virtual_node:
                 true_masks_val = np.repeat(tm_v[start_:end_], self.val_num_samples, axis=0)
@@ -154,14 +159,23 @@ class Model(object):
                 pred_v[start_:end_] = D5_batch.reshape(val_batch_size, self.val_num_samples, self.n_max, 3)
 
             # iterative refinement of posterior
+            D5_batch_pred = copy.deepcopy(D5_batch)
             for r in range(self.refine_steps):
-                dict_val[self.pos] = D5_batch
-                D5_batch = self.sess.run(self.X_pred_det, feed_dict=dict_val)
+                if self.use_X:
+                    dict_val[self.pos] = D5_batch_pred
+                if self.use_R:
+                    pred_proximity = self.sess.run(self.pos_to_proximity, \
+                                        feed_dict={self.pos: D5_batch_pred, \
+                                                    self.mask:mask_val})
+                    dict_val[self.proximity] = pred_proximity
+                D5_batch = self.sess.run(self.X_pred, feed_dict=dict_val)
+                D5_batch_pred = \
+                    self.refine_mom * D5_batch_pred + (1-self.refine_mom) * D5_batch
 
             valres=[]
-            for j in range(D5_batch.shape[0]):
+            for j in range(D5_batch_pred.shape[0]):
                 ms_v_index = int(j / self.val_num_samples) + start_
-                res = self.getRMS(MS_v[ms_v_index], D5_batch[j])
+                res = self.getRMS(MS_v[ms_v_index], D5_batch_pred[j])
                 valres.append(res)
 
             valres = np.array(valres)
@@ -213,6 +227,11 @@ class Model(object):
             load_path = None, save_path = None, event_path = None, tm_trn=None, tm_val=None,
             w_reg=1e-3, debug=False, exp=None):
 
+        if exp is not None:
+            save_path = exp.get_data_path(exp.name, exp.version)
+            event_path = os.path.join(save_path, 'event')
+            print(save_path, flush=True)
+            print(event_path, flush=True)
         # SummaryWriter
         if not debug and exp is None:
             summary_writer = SummaryWriter(event_path)
@@ -272,7 +291,7 @@ class Model(object):
 
                 # log results
                 curr_iter = epoch * n_batch + i
-                if not debug and exp is None:
+                if not debug:
                     summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
                     summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
                     summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
@@ -293,7 +312,7 @@ class Model(object):
             valaggr_mean[epoch] = valscores_mean
             valaggr_std[epoch] = valscores_std
 
-            if not debug and exp is None:
+            if not debug:
                 summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
                 summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
                 summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
@@ -311,11 +330,11 @@ class Model(object):
                 exp.log(exp_dict)
                 exp.save()
 
-            if save_path is not None and not debug and exp is None:
+            if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
             # keep track of the best model as well in the separate checkpoint
             # it is done by copying the checkpoint
-            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug and exp is None:
+            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug:
                 for ckpt_f in glob.glob(save_path + '*'):
                     model_name_split = ckpt_f.split('/')
                     model_path = '/'.join(model_name_split[:-1])
