@@ -234,7 +234,7 @@ class Model(object):
             print(save_path, flush=True)
             print(event_path, flush=True)
         # SummaryWriter
-        if not debug and exp is None:
+        if not debug:
             train_summary_writer = SummaryWriter(train_event_path)
             valid_summary_writer = SummaryWriter(valid_event_path)
 
@@ -294,7 +294,7 @@ class Model(object):
                 # log results
                 curr_iter = epoch * n_batch + i
 
-                if not debug and exp is None:
+                if not debug:
                     if curr_iter % log_train_steps == 0:
                         train_summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
                         train_summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
@@ -316,7 +316,7 @@ class Model(object):
             valaggr_mean[epoch] = valscores_mean
             valaggr_std[epoch] = valscores_std
 
-            if not debug and exp is None:
+            if not debug:
                 valid_summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
                 valid_summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
                 valid_summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
