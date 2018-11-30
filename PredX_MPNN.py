@@ -227,6 +227,12 @@ class Model(object):
             load_path = None, save_path = None, train_event_path = None, valid_event_path = None,\
             log_train_steps=100, tm_trn=None, tm_val=None, w_reg=1e-3, debug=False, exp=None):
 
+        if exp is not None:
+            data_path = exp.get_data_path(exp.name, exp.version)
+            save_path = os.path.join(data_path, 'ckpt')
+            event_path = os.path.join(data_path, 'event')
+            print(save_path, flush=True)
+            print(event_path, flush=True)
         # SummaryWriter
         if not debug and exp is None:
             train_summary_writer = SummaryWriter(train_event_path)
@@ -287,6 +293,7 @@ class Model(object):
 
                 # log results
                 curr_iter = epoch * n_batch + i
+
                 if not debug and exp is None:
                     if curr_iter % log_train_steps == 0:
                         train_summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
@@ -298,9 +305,10 @@ class Model(object):
                 trnscores[i,:] = trnresult
 
             print(np.mean(trnscores,0), flush=True)
+            exp_dict = {}
             if exp is not None:
-                exp.log({'training epoch id': epoch})
-                exp.log({'train_score': np.mean(trnscores,0)})
+                exp_dict['training epoch id'] = epoch
+                exp_dict['train_score'] = np.mean(trnscores,0)
 
             valscores_mean, valscores_std = self.test(D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, \
                                             load_path=None, tm_v=tm_val, debug=debug)
@@ -319,17 +327,18 @@ class Model(object):
             print ('::: training epoch id {} :: --- val mean={} , std={} ; --- best val mean={} , std={} '.format(\
                     epoch, valscores_mean, valscores_std, np.min(valaggr_mean[0:epoch+1]), np.min(valaggr_std[0:epoch+1])))
             if exp is not None:
-                exp.log({'val mean': valscores_mean})
-                exp.log({'std': valscores_std})
-                exp.log({'best val mean': np.min(valaggr_mean[0:epoch+1])})
-                exp.log({'std of best val mean': np.min(valaggr_std[0:epoch+1])})
+                exp_dict['val mean'] = valscores_mean
+                exp_dict['std'] = valscores_std
+                exp_dict['best val mean'] = np.min(valaggr_mean[0:epoch+1])
+                exp_dict['std of best val mean'] = np.min(valaggr_std[0:epoch+1])
+                exp.log(exp_dict)
                 exp.save()
 
-            if save_path is not None and not debug and exp is None:
+            if save_path is not None and not debug:
                 self.saver.save( self.sess, save_path )
             # keep track of the best model as well in the separate checkpoint
             # it is done by copying the checkpoint
-            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug and exp is None:
+            if valaggr_mean[epoch] == np.min(valaggr_mean[0:epoch+1]) and not debug:
                 for ckpt_f in glob.glob(save_path + '*'):
                     model_name_split = ckpt_f.split('/')
                     model_path = '/'.join(model_name_split[:-1])

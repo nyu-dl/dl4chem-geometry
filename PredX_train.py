@@ -165,7 +165,7 @@ def search_train(args, *extra_args):
 
 if __name__ == '__main__':
 
-    hyperparameter_search = False
+    hyperparameter_search = True
     if hyperparameter_search:
         parser = HyperOptArgumentParser(strategy='random_search')
     else:
@@ -205,8 +205,8 @@ if __name__ == '__main__':
                             help='number of mpnn steps')
         parser.add_argument('--condaenv_path', type=str)
 
-        #args = parser.parse_args()
-        args, unknown = parser.parse_known_args()
+        args = parser.parse_args()
+        #args, unknown = parser.parse_known_args()
         cluster = SlurmCluster(
             hyperparam_optimizer=args,
             log_path=args.ckptdir,
