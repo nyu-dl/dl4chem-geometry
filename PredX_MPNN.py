@@ -228,8 +228,9 @@ class Model(object):
             w_reg=1e-3, debug=False, exp=None):
 
         if exp is not None:
-            save_path = exp.get_data_path(exp.name, exp.version)
-            event_path = os.path.join(save_path, 'event')
+            data_path = exp.get_data_path(exp.name, exp.version)
+            save_path = os.path.join(data_path, 'ckpt')
+            event_path = os.path.join(data_path, 'event')
             print(save_path, flush=True)
             print(event_path, flush=True)
         # SummaryWriter
