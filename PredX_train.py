@@ -47,11 +47,23 @@ def train(args, exp=None):
 
     if not os.path.exists(args.ckptdir):
         os.makedirs(args.ckptdir)
-    if not os.path.exists(args.eventdir):
-        os.makedirs(args.eventdir)
+
+    # create train and valid event dir for tensorboard logits
+    args.train_eventdir = args.eventdir.split('/')
+    args.train_eventdir.insert(-1, 'train')
+    args.train_eventdir = '/'.join(args.train_eventdir)
+
+    args.valid_eventdir = args.eventdir.split('/')
+    args.valid_eventdir.insert(-1, 'valid')
+    args.valid_eventdir = '/'.join(args.valid_eventdir)
+
+    if not os.path.exists(args.train_eventdir):
+        os.makedirs(args.train_eventdir)
+    if not os.path.exists(args.valid_eventdir):
+        os.makedirs(args.valid_eventdir)
 
     save_path = os.path.join(args.ckptdir, args.model_name + '_model.ckpt')
-    event_path = os.path.join(args.eventdir, args.model_name)
+    #event_path = os.path.join(args.eventdir, args.model_name)
 
     if args.virtual_node:
         molvec_fname = data_path() + args.data+'_molvec_'+str(n_max-1)+'_vn.p'
@@ -134,8 +146,9 @@ def train(args, exp=None):
         else:
             model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                         D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
-                        load_path=args.loaddir, save_path=save_path, event_path=event_path, \
-                        tm_trn=tm_trn, tm_val=tm_val, \
+                        load_path=args.loaddir, save_path=save_path, \
+                        train_event_path=args.train_eventdir, valid_event_path=args.valid_eventdir, \
+                        log_train_steps=args.log_train_steps, tm_trn=tm_trn, tm_val=tm_val, \
                         w_reg=args.w_reg, \
                         debug=args.debug, exp=exp)
 
@@ -177,19 +190,19 @@ if __name__ == '__main__':
     parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
     parser.add_argument('--use_X', action='store_true', default=False, help='use X as input for posterior of Z')
     parser.add_argument('--use_R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
+    parser.add_argument('--w_reg', type=float, default=1e-5, help='weight for conditional prior regularization')
     parser.add_argument('--refine_mom', type=float, default=0.99, help='momentum used for refinement')
     parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
+    parser.add_argument('--log_train_steps', type=int, default=100, help='number of steps to log train')
 
     if hyperparameter_search:
-        parser.add_argument('--nb_trials', type=int, default=5, help='number of hyperparameter combinations')
-        parser.opt_list('--dim_h', type=int, default=50, options=[50, 100, 200], tunable=True,
+        parser.add_argument('--nb_trials', type=int, default=8, help='number of hyperparameter combinations')
+        parser.opt_list('--dim_h', type=int, default=50, options=[25, 50], tunable=True,
                             help='dimension of the hidden')
-        parser.opt_list('--dim_f', type=int, default=100, options=[50, 100, 200], tunable=True,
+        parser.opt_list('--dim_f', type=int, default=100, options=[50, 100], tunable=True,
                             help='dimension of the hidden')
-        parser.opt_list('--mpnn_steps', type=int, default=5, options=[2, 3, 4, 5], tunable=True,
+        parser.opt_list('--mpnn_steps', type=int, default=5, options=[3, 5], tunable=True,
                             help='number of mpnn steps')
-        parser.opt_range('--w_reg', type=float, default=1e-3, options=[1e-1, 1e-3, 1e-5, 0], tunable=True,
-                            help='weight for conditional prior regularization')
         parser.add_argument('--condaenv_path', type=str)
 
         #args = parser.parse_args()
@@ -203,7 +216,7 @@ if __name__ == '__main__':
         cluster.memory_mb_per_node = 10000
 
         # set walltime
-        cluster.job_time = '96:00:00'
+        cluster.job_time = '120:00:00'
 
         cluster.load_modules(['cuda/9.0.176', 'cudnn/9.0v7.0.5'])
         cluster.add_command('source activate {}'.format(args.condaenv_path))
@@ -212,7 +225,6 @@ if __name__ == '__main__':
         parser.add_argument('--dim_h', type=int, default=50, help='dimension of the hidden')
         parser.add_argument('--dim_f', type=int, default=100, help='dimension of the hidden')
         parser.add_argument('--mpnn_steps', type=int, default=5, help='number of mpnn steps')
-        parser.add_argument('--w_reg', type=float, default=1e-3, help='weight for conditional prior regularization')
 
         args = parser.parse_args()
 

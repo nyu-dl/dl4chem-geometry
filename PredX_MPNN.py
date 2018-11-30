@@ -224,12 +224,13 @@ class Model(object):
 
 
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
-            load_path = None, save_path = None, event_path = None, tm_trn=None, tm_val=None,
-            w_reg=1e-3, debug=False, exp=None):
+            load_path = None, save_path = None, train_event_path = None, valid_event_path = None,\
+            log_train_steps=100, tm_trn=None, tm_val=None, w_reg=1e-3, debug=False, exp=None):
 
         # SummaryWriter
         if not debug and exp is None:
-            summary_writer = SummaryWriter(event_path)
+            train_summary_writer = SummaryWriter(train_event_path)
+            valid_summary_writer = SummaryWriter(valid_event_path)
 
         # objective functions
         cost_KLDZ = tf.reduce_mean( tf.reduce_sum( self._KLD(self.postZ_mu, self.postZ_lsgms, self.priorZ_mu, self.priorZ_lsgms), [1, 2]) ) # posterior | prior
@@ -287,10 +288,11 @@ class Model(object):
                 # log results
                 curr_iter = epoch * n_batch + i
                 if not debug and exp is None:
-                    summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
-                    summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
-                    summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
-                    summary_writer.add_scalar("train/cost_KLD0", trnresult[3], curr_iter)
+                    if curr_iter % log_train_steps == 0:
+                        train_summary_writer.add_scalar("train/cost_op", trnresult[0], curr_iter)
+                        train_summary_writer.add_scalar("train/cost_X", trnresult[1], curr_iter)
+                        train_summary_writer.add_scalar("train/cost_KLDZ", trnresult[2], curr_iter)
+                        train_summary_writer.add_scalar("train/cost_KLD0", trnresult[3], curr_iter)
 
                 assert np.sum(np.isnan(trnresult)) == 0
                 trnscores[i,:] = trnresult
@@ -307,10 +309,10 @@ class Model(object):
             valaggr_std[epoch] = valscores_std
 
             if not debug and exp is None:
-                summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
-                summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
-                summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
-                summary_writer.add_scalar("val/min_valscores_std", np.min(valaggr_std[0:epoch+1]), epoch)
+                valid_summary_writer.add_scalar("val/valscores_mean", valscores_mean, epoch)
+                valid_summary_writer.add_scalar("val/min_valscores_mean", np.min(valaggr_mean[0:epoch+1]), epoch)
+                valid_summary_writer.add_scalar("val/valscores_std", valscores_std, epoch)
+                valid_summary_writer.add_scalar("val/min_valscores_std", np.min(valaggr_std[0:epoch+1]), epoch)
 
             #print('::: training epoch id', epoch, ':: --- val : ', np.mean(valscores, 0), '--- min : ', np.min(valaggr[0:epoch+1]), flush=True)
             #print('::: training epoch id', epoch, ':: --- val mean {} std {} : ', valscores_mean, valscores_std, '--- min mean {} std {} : ', np.min(valaggr_mean[0:epoch+1]), flush=True)
