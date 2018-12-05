@@ -226,11 +226,10 @@ class Model(object):
     def train(self, D1_t, D2_t, D3_t, D4_t, D5_t, MS_t, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v,\
             load_path = None, save_path = None, train_event_path = None, valid_event_path = None,\
             log_train_steps=100, tm_trn=None, tm_val=None, w_reg=1e-3, debug=False, exp=None):
-
         if exp is not None:
             data_path = exp.get_data_path(exp.name, exp.version)
-            save_path = os.path.join(data_path, 'ckpt')
-            event_path = os.path.join(data_path, 'event')
+            save_path = os.path.join(data_path, 'checkpoints/model.ckpt')
+            event_path = os.path.join(data_path, 'event/')
             print(save_path, flush=True)
             print(event_path, flush=True)
         # SummaryWriter
@@ -303,7 +302,6 @@ class Model(object):
 
                 assert np.sum(np.isnan(trnresult)) == 0
                 trnscores[i,:] = trnresult
-
             print(np.mean(trnscores,0), flush=True)
             exp_dict = {}
             if exp is not None:
