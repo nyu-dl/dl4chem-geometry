@@ -29,7 +29,7 @@ def to_onehot(val, cat, etc=0):
     return onehot
 
 
-def atomFeatures(a, ri, ri_a):
+def atomFeatures(a, ri_a):
 
     def _ringSize_a(a, rings):
         onehot = np.zeros(6)
@@ -41,9 +41,9 @@ def atomFeatures(a, ri, ri_a):
         return onehot
 
     v1 = to_onehot(a.GetSymbol(), ['C','N','O','F'], 1)
-    v2 = to_onehot(a.GetHybridization(), [Chem.rdchem.HybridizationType.SP,Chem.rdchem.HybridizationType.SP2,Chem.rdchem.HybridizationType.SP3], 1)
+    v2 = to_onehot(str(a.GetHybridization()), ['SP','SP2','SP3'], 1)
 
-    v3 = [a.GetAtomicNum(), a.GetDegree(), a.GetFormalCharge(), a.GetTotalNumHs(), int(a.GetIsAromatic())]
+    v3 = [a.GetAtomicNum(), a.GetDegree(), a.GetFormalCharge(), a.GetTotalNumHs(), atom.GetImplicitValence(), a.GetNumRadicalElectrons(), int(a.GetIsAromatic())]
     v4 = _ringSize_a(a, ri_a)
 
     v5 = np.zeros(3)
@@ -59,29 +59,26 @@ def atomFeatures(a, ri, ri_a):
     return np.concatenate([v1,v2,v3,v4,v5], axis=0)
 
 
-def bondFeatures(bbs, ri, samering, shortpath):
+def bondFeatures(bbs, samering, shortpath):
 
     if len(bbs)==1:
-        v1 = to_onehot(bbs[0].GetBondType(), [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC], 1)
+        v1 =  to_onehot(str(bbs[0].GetBondType()), ['SINGLE', 'DOUBLE', 'TRIPLE', 'AROMATIC'], 1)
         v2 = to_onehot(str(bbs[0].GetStereo()), ['STEREOZ', 'STEREOE','STEREOANY','STEREONONE'], 1)
-        v3 = [int(bbs[0].GetIsConjugated()), shortpath]
+        v2 = v2[:2]
+        v3 = [int(bbs[0].GetIsConjugated()), int(bbs[0].IsInRing()), samering, shortpath]
     else:
         v1 = np.zeros(4)
-        v2 = np.zeros(4)
-        v3 = [0, shortpath]
+        v2 = np.zeros(2)
+        v3 = [0, 0, samering, shortpath]
 
-    v4 = samering
-    v2 = v2[:3]
-
-
-    return np.concatenate([v1,v2,v3,v4], axis=0)
+    return np.concatenate([v1,v2,v3], axis=0)
 
 
 data='QM9'
 n_min=2
 n_max=9
-atom_dim=20
-edge_dim=15
+atom_dim=22
+edge_dim=10
 virtual_node = args.virtual_node
 if virtual_node:
     edge_dim += 1
@@ -131,7 +128,7 @@ for i in range(len(mollist)):
 
     for j in range(n):
         atom = mol.GetAtomWithIdx(j)
-        node[j, :]=atomFeatures(atom, ri, ri_a)
+        node[j, :]=atomFeatures(atom, ri_a)
         mask[j, 0]=1
     if virtual_node:
         mask[n, 0] = 1
@@ -148,18 +145,18 @@ for i in range(len(mollist)):
             shortpath = len(molpath) - 1
             assert shortpath>0
 
-            samering = np.zeros(6)
+            samering = 0
             for alist in ri_a:
-                if j in alist and k in alist and len(alist) <= 8:
-                    samering[len(alist) - 3] += 1
+                if j in alist and k in alist:
+                    samering = 1
 
             bond = [mol.GetBondBetweenAtoms(molpath[mm], molpath[mm+1]) for mm in range(shortpath)]
             if virtual_node:
-                edge[j, k, :] = np.pad(bondFeatures(bond, ri, samering, shortpath), (1, 0), 'constant')
+                edge[j, k, :] = np.pad(bondFeatures(bond, samering, shortpath), (1, 0), 'constant')
                 edge[k, j, :] = edge[j, k, :]
             else:
-                edge[j, k, :] = bondFeatures(bond, ri, samering, shortpath)
-                edge[k, j, :] = bondFeatures(bond, ri, samering, shortpath)
+                edge[j, k, :] = bondFeatures(bond, samering, shortpath)
+                edge[k, j, :] = edge[j, k, :]
 
 
     if virtual_node:
