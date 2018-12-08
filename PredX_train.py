@@ -22,8 +22,8 @@ def train(args, exp=None):
 
     if args.data == 'COD':
         n_max = 50
-        dim_node = 33
-        dim_edge = 15
+        dim_node = 35
+        dim_edge = 10
         if args.virtual_node is True:
             n_max += 1
             dim_edge += 1
@@ -31,8 +31,8 @@ def train(args, exp=None):
         ntst = 3000
     elif args.data == 'QM9':
         n_max = 9
-        dim_node = 20
-        dim_edge = 15
+        dim_node = 22
+        dim_edge = 10
         if args.virtual_node is True:
             n_max += 1
             dim_edge += 1
