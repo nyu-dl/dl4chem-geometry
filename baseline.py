@@ -67,7 +67,7 @@ for t in range(nmols):
         try:
             ## baseline force field part with UFF
             mol_baseUFF = copy.deepcopy(mol_init_1)
-            AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, confId=0)
+            AllChem.UFFOptimizeMolecule(mol_baseUFF, maxIters=1000)
             mol_baseUFF=Chem.RemoveHs(mol_baseUFF)
             RMS_UFF = AllChem.AlignMol(mol_baseUFF, mol_ref)
             
@@ -78,7 +78,7 @@ for t in range(nmols):
         try:
             ## baseline force field part with MMFF
             mol_baseMMFF = copy.deepcopy(mol_init_1)
-            AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, confId=0)
+            AllChem.MMFFOptimizeMolecule(mol_baseMMFF, maxIters=1000)
             mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
             RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref)
             
