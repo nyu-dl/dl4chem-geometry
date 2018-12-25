@@ -165,7 +165,7 @@ def search_train(args, *extra_args):
 
 if __name__ == '__main__':
 
-    hyperparameter_search = True
+    hyperparameter_search = False
     if hyperparameter_search:
         parser = HyperOptArgumentParser(strategy='random_search')
     else:
