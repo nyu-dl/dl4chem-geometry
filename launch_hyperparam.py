@@ -24,7 +24,7 @@ parser.add_argument('--num_times', type=int, default=4, help='number of times to
 
 args = parser.parse_args()
 
-flags = [['--dim_h 25', '--dim_h 50'], ['--dim_f 50', '--dim_h 100'], ['--mpnn_steps 3', '--mpnn_steps 5']]
+flags = [['--dim_h 25', '--dim_h 50'], ['--dim_f 50', '--dim_f 100'], ['--mpnn_steps 3', '--mpnn_steps 5']]
 #flags = [['--dim_h 25', '--dim_h 50']] # for debugging
 
 if __name__ == "__main__":
