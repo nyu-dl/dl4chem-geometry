@@ -15,6 +15,8 @@ def data_path():
     """Path to data depending on user launching the script"""
     if getpass.getuser() == "mansimov":
         return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
+    if getpass.getuser() == "em3382":
+        return "/scratch/em3382/seokho_drive_datasets/"
     else:
         return "./"
 
