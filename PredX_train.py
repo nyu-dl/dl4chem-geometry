@@ -161,7 +161,13 @@ def search_train(args, *extra_args):
     train(args, exp)
     exp.save()
 
+def save_func(model):
+    model.saver.save()
 
+def load_func(model, loaddir):
+    sess = tf.Session()
+    saver = tf.train.import_meta_graph('my_test_model-1000.meta')
+    saver.restore(model.sess, loaddir)
 
 if __name__ == '__main__':
 
