@@ -262,7 +262,7 @@ class Model(object):
         valaggr_mean = np.zeros(500)
         valaggr_std = np.zeros(500)
 
-        for epoch in range(500):
+        for epoch in range(2000):
 
             [D1_t, D2_t, D3_t, D4_t, D5_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t])
 

@@ -15,6 +15,8 @@ def data_path():
     """Path to data depending on user launching the script"""
     if getpass.getuser() == "mansimov":
         return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
+    if getpass.getuser() == "em3382":
+        return "/scratch/em3382/seokho_drive_datasets/"
     else:
         return "./"
 
@@ -22,8 +24,8 @@ def train(args, exp=None):
 
     if args.data == 'COD':
         n_max = 50
-        dim_node = 33
-        dim_edge = 15
+        dim_node = 35
+        dim_edge = 10
         if args.virtual_node is True:
             n_max += 1
             dim_edge += 1
@@ -31,8 +33,8 @@ def train(args, exp=None):
         ntst = 3000
     elif args.data == 'QM9':
         n_max = 9
-        dim_node = 20
-        dim_edge = 15
+        dim_node = 22
+        dim_edge = 10
         if args.virtual_node is True:
             n_max += 1
             dim_edge += 1
@@ -171,7 +173,7 @@ def load_func(model, loaddir):
 
 if __name__ == '__main__':
 
-    hyperparameter_search = True
+    hyperparameter_search = False
     if hyperparameter_search:
         parser = HyperOptArgumentParser(strategy='random_search')
     else:
