@@ -259,10 +259,11 @@ class Model(object):
 
         # training
         print('::: start training')
-        valaggr_mean = np.zeros(500)
-        valaggr_std = np.zeros(500)
+        num_epochs = 2500
+        valaggr_mean = np.zeros(num_epochs)
+        valaggr_std = np.zeros(num_epochs)
 
-        for epoch in range(2000):
+        for epoch in range(num_epochs):
 
             [D1_t, D2_t, D3_t, D4_t, D5_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t])
 
