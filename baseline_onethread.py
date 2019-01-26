@@ -10,6 +10,7 @@ import pickle as pkl
 import os
 import getpass
 import logging
+import scipy
 logging.basicConfig(level=logging.INFO)
 
 
@@ -22,6 +23,7 @@ parser.add_argument('--norm', action='store_true', help='normalize neural net pr
 parser.add_argument('--savedir', type=str, default='./', help='save directory of results')
 parser.add_argument('--nn_path', type=str, default=None, help='path to neural net results')
 parser.add_argument('--saveall', action='store_true', help='save mmff and uff rmsd per molecule')
+parser.add_argument('--debug', action='store_true', help='debug the results')
 parser.add_argument('--savepermol', action='store_true', help='save mmff and uff rmsd per molecule in separate repos')
 parser.add_argument('--max_iters', type=int, default=200, help='number of iterations for baselines to run')
 parser.add_argument('--num_reps', type=int, default=10, help='number of repetitions')
@@ -84,6 +86,7 @@ if args.nn_path:
     args.nn_path = os.path.join(args.nn_path, args.data, '_val_' if args.use_val else '_test_')
 uff_converged = []
 mmff_converged = []
+
 for t in range(nmols):
     if t % 10 == 0 :
         logging.info("{}, {}, {}".format(t, nmols, molsmi[t]))
@@ -101,29 +104,16 @@ for t in range(nmols):
     pred_uff = []
     ttest_mmff = []
     pred_mmff = []
+    embed_success = 0
 
     if args.nn_path:
         nn_mol = pkl.load(open(os.path.join(args.nn_path, "mol_{}_neuralnet.p".format(t)), 'rb'))
         nn_pred = nn_mol['pred']
 
     for repid in range(args.num_reps):
-        '''
-        if args.nn_path:
-            n_est = mol_ref.GetNumAtoms()
-            init_cf = Chem.rdchem.Conformer(n_est)
-            if args.norm:
-                nn_pred[repid] = nn_pred[repid] - nn_pred[repid].mean(0)
-            for k in range(n_est):
-                init_cf.SetAtomPosition(k, nn_pred[repid][k].tolist())
-
-            mol_init_1 = copy.deepcopy(mol_ref)
-            mol_init_1.RemoveConformer(0)
-            pdb.set_trace()
-            mol_init_1.AddConformer(init_cf)
-            #mol_init_1 = Chem.AddHs(mol_init_1, addCoords=False)
-            #mol_init_1 = Chem.AddHs(mol_init_1, addCoords=True)
-        '''
-
+        if args.debug:
+            if repid % 10 == 0:
+                logging.info ("repid {} ; mol id {}".format(repid, t))
         if args.nn_path:
             n_est = mol_ref.GetNumAtoms()
             coord_map = {}
@@ -131,9 +121,17 @@ for t in range(nmols):
                 nn_pred_k = nn_pred[repid][k].tolist()
                 point_k = Geometry.Point3D(*nn_pred_k)
                 coord_map[k] = point_k
+
             mol_init_1=Chem.AddHs(mol_ref)
             mol_init_1.RemoveConformer(0)
-            AllChem.EmbedMolecule(mol_init_1, coordMap=coord_map, ignoreSmoothingFailures=True)
+            embed_result = AllChem.EmbedMolecule(mol_init_1, coordMap=coord_map,\
+                            useRandomCoords=True, enforceChirality=False,\
+                            ignoreSmoothingFailures=True)
+            if embed_result == 0:
+                embed_success += 1
+            else:
+                pdb.set_trace()
+
         else:
             mol_init_1=Chem.AddHs(mol_ref)
             mol_init_1.RemoveConformer(0)
@@ -165,7 +163,11 @@ for t in range(nmols):
         except:
             continue
 
-    #logging.info (len(ttest))
+    if args.debug:
+        logging.info ('mol id {}'.format(t))
+        logging.info ('num of successful embeddings {}'.format(embed_success))
+        logging.info ('num of uff mols {}, mmff mols {}'.format(len(ttest_uff), len(ttest_mmff)))
+
     if args.saveall:
         if len(ttest_uff) > 0:
             all_uff.append(np.array(ttest_uff))
