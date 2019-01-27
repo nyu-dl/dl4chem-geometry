@@ -129,13 +129,13 @@ for t in range(nmols):
                             ignoreSmoothingFailures=True)
             if embed_result == 0:
                 embed_success += 1
-            else:
-                pdb.set_trace()
 
         else:
             mol_init_1=Chem.AddHs(mol_ref)
             mol_init_1.RemoveConformer(0)
-            AllChem.EmbedMolecule(mol_init_1)
+            AllChem.EmbedMolecule(mol_init_1, \
+                            useRandomCoords=True, enforceChirality=False,\
+                            ignoreSmoothingFailures=True)
 
         try:
             ## baseline force field part with UFF
