@@ -14,7 +14,10 @@ from test_tube.hpc import SlurmCluster
 def data_path():
     """Path to data depending on user launching the script"""
     if getpass.getuser() == "mansimov":
-        return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
+        if os.uname().nodename == "mansimov-desktop":
+            return "./data/"
+        else:
+            return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
     if getpass.getuser() == "em3382":
         return "/scratch/em3382/seokho_drive_datasets/"
     else:
@@ -131,20 +134,26 @@ def train(args, exp=None):
                         mpnn_steps=args.mpnn_steps, alignment_type=args.alignment_type, tol=args.tol,\
                         use_X=args.use_X, use_R=args.use_R, \
                         virtual_node=args.virtual_node, seed=args.seed, \
-                        refine_steps=args.refine_steps, refine_mom=args.refine_mom)
+                        refine_steps=args.refine_steps, refine_mom=args.refine_mom, \
+                        prior_T=args.prior_T)
     #if args.loaddir != None:
     #    model.saver.restore(model.sess, args.loaddir)
+
+    if args.savepermol:
+        args.savepreddir = os.path.join(args.savepreddir, args.data, "_val_" if args.use_val else "_test_")
+        if not os.path.exists(args.savepreddir):
+            os.makedirs(args.savepreddir)
 
     with model.sess:
         if args.test:
             if args.use_val:
                 model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
                             load_path=args.loaddir, tm_v=tm_val, debug=args.debug, \
-                            savepred_path=args.savepreddir)
+                            savepred_path=args.savepreddir, savepermol=args.savepermol)
             else:
                 model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, \
                             load_path=args.loaddir, tm_v=tm_tst, debug=args.debug, \
-                            savepred_path=args.savepreddir)
+                            savepred_path=args.savepreddir, savepermol=args.savepermol)
         else:
             model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                         D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
@@ -184,6 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--eventdir', type=str, default='./events/')
     parser.add_argument('--savepreddir', type=str, default=None,
                         help='path where predictions of the network are save')
+    parser.add_argument('--savepermol', action='store_true', help='save results per molecule')
     parser.add_argument('--loaddir', type=str, default=None)
     parser.add_argument('--model_name', type=str, default='neuralnet')
     parser.add_argument('--alignment_type', type=str, default='kabsch', choices=['default', 'linear', 'kabsch'])
@@ -196,6 +206,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_num_samples', type=int, default=10,
                         help='number of samples from prior used for validation')
     parser.add_argument('--tol', type=float, default=1e-5, help='tolerance for masking used in svd calculation')
+    parser.add_argument('--prior_T', type=float, default=1, help='temperature to use for the prior')
     parser.add_argument('--use_X', action='store_true', default=False, help='use X as input for posterior of Z')
     parser.add_argument('--use_R', action='store_true', default=True, help='use R(X) as input for posterior of Z')
     parser.add_argument('--w_reg', type=float, default=1e-5, help='weight for conditional prior regularization')

@@ -25,8 +25,11 @@ args = parser.parse_args()
 def data_path():
     """Path to data depending on user launching the script"""
     if getpass.getuser() == "mansimov":
-        return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
-    elif getpass.getuser() == "em3382":
+        if os.uname().nodename == "mansimov-desktop":
+            return "./data/"
+        else:
+            return "/misc/kcgscratch1/ChoGroup/mansimov/seokho_drive_datasets/"
+    if getpass.getuser() == "em3382":
         return "/scratch/em3382/seokho_drive_datasets/"
     else:
         return "./"
