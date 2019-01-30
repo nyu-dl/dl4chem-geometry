@@ -19,6 +19,8 @@ parser.add_argument('--num-total-samples', type=int, default=10, help='number of
 parser.add_argument('--num-parallel-samples', type=int, default=10, help='number of parallel samples to use per molecule')
 parser.add_argument('--num-threads', type=int, default=4, help='number of threads to use')
 parser.add_argument('--savepermol', action='store_true', help='save mmff and uff results per molecule')
+parser.add_argument('--setting', type=str, default='default', choices=['default', 'ignorefailures'], help='setting of embed molecule')
+
 
 args = parser.parse_args()
 
@@ -83,6 +85,7 @@ for t in range(nmols):
     mol_smi = Chem.MolFromSmiles(molsmi[t])
 
     n_est = mol_ref.GetNumHeavyAtoms()
+    n_rot_bonds = AllChem.CalcNumRotatableBonds(mol_ref)
 
     ttest_uff = []
     ttest_mmff = []
@@ -91,19 +94,34 @@ for t in range(nmols):
     for repid in range(iters):
         mol_init_1=Chem.AddHs(mol_ref)
         # remove all conformers from molecule
-        for ci in range(len(mol_init_1.GetConformers())):
-            mol_init_1.RemoveConformer(ci)
-
+        mol_init_1.RemoveAllConformers()
         # get multiple conformers
-        AllChem.EmbedMultipleConfs(mol_init_1,args.num_parallel_samples+1,numThreads=args.num_threads)
+        if args.setting == 'ignorefailures':
+            useRandomCoords=True
+            enforceChirality=False
+            ignoreSmoothingFailures=True
+        elif args.setting == 'default':
+            useRandomCoords=False
+            enforceChirality=True
+            ignoreSmoothingFailures=False
+
+        AllChem.EmbedMultipleConfs(mol_init_1,args.num_parallel_samples,\
+                                    numThreads=args.num_threads,\
+                                    useRandomCoords=useRandomCoords,\
+                                    enforceChirality=enforceChirality,\
+                                    ignoreSmoothingFailures=ignoreSmoothingFailures)
 
         try:
             ## baseline force field part with UFF
             mol_baseUFF = copy.deepcopy(mol_init_1)
-            AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, numThreads=args.num_threads, maxIters=1000)
+            AllChem.UFFOptimizeMoleculeConfs(mol_baseUFF, numThreads=args.num_threads, maxIters=200)
             mol_baseUFF=Chem.RemoveHs(mol_baseUFF)
             RMSlist_UFF = []
-            AllChem.AlignMolConformers(mol_baseUFF, RMSlist=RMSlist_UFF)
+            for c in mol_baseUFF.GetConformers():
+                c_id = c.GetId()
+                RMS_UFF = AllChem.AlignMol(mol_baseUFF, mol_ref, prbCid=c_id, refCid=0)
+                RMSlist_UFF.append(RMS_UFF)
+            #AllChem.AlignMolConformers(mol_baseUFF, RMSlist=RMSlist_UFF)
             ttest_uff.extend(RMSlist_UFF)
         except:
             continue
@@ -111,17 +129,20 @@ for t in range(nmols):
         try:
             ## baseline force field part with MMFF
             mol_baseMMFF = copy.deepcopy(mol_init_1)
-            AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, numThreads=args.num_threads, maxIters=1000)
+            AllChem.MMFFOptimizeMoleculeConfs(mol_baseMMFF, numThreads=args.num_threads, maxIters=200)
             mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
             RMSlist_MMFF = []
-            AllChem.AlignMolConformers(mol_baseMMFF, RMSlist=RMSlist_MMFF)
+            for c in mol_baseMMFF.GetConformers():
+                c_id = c.GetId()
+                RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref, prbCid=c_id, refCid=0)
+                RMSlist_MMFF.append(RMS_MMFF)
             ttest_mmff.extend(RMSlist_MMFF)
         except:
             continue
 
         # save results per molecule
         if args.savepermol:
-            pkl.dump({'mmff': np.array(ttest_mmff), 'uff': np.array(ttest_uff), 'n_heavy_atoms': n_est},\
+            pkl.dump({'mmff': np.array(ttest_mmff), 'uff': np.array(ttest_uff), 'n_rot_bonds':n_rot_bonds, 'n_heavy_atoms': n_est},\
                     open(os.path.join(dir_name, 'mol_{}.p'.format(t)), 'wb'))
 
     #print (len(ttest))
