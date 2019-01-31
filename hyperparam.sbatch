@@ -12,6 +12,8 @@ module load cuda/9.0.176
 module load cudnn/9.0v7.0.5
 
 # Run.
+source activate ~/anaconda3/envs/dl4chem-gpu
+cd /scratch/onm217/dl4chem-geometry
 export IFS=';'
 for SUB_FLAGS in $FLAGS
 do
