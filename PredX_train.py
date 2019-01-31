@@ -44,6 +44,15 @@ def train(args, exp=None):
         ntrn = 100000
         nval = 5000
         ntst = 5000
+    elif args.data == 'CSD':
+        n_max = 50
+        dim_node = 98
+        dim_edge = 10
+        if args.virtual_node is True:
+            n_max += 1
+            dim_edge += 1
+        nval = 3000
+        ntst = 3000
 
     dim_h = args.dim_h
     dim_f = args.dim_f
@@ -78,7 +87,25 @@ def train(args, exp=None):
         molset_fname = data_path() + args.data+'_molset_'+str(n_max)+'.p'
 
     print('::: load data')
-    [D1, D2, D3, D4, D5] = pkl.load(open(molvec_fname,'rb'))
+    if args.data == 'CSD':
+        molset_fname = 'CSD_mol/CSD_molset_50.p'
+        D1, D2, D3, D4, D5 = [], [], [], [], []
+        for i in range(11):
+            with open('CSD_mol/CSD_molvec_50_{}.p'.format(i), 'rb') as f:
+                d1, d2, d3, d4, d5 = pkl.load(f)
+            D1.append(d1)
+            D2.append(d2)
+            D3.append(d3)
+            D4.append(d4)
+            D5.append(d5)
+        from sparse import coo
+        D1 = coo.concatenate(D1, 0)
+        D2 = coo.concatenate(D2, 0)
+        D3 = coo.concatenate(D3, 0)
+        D4 = np.concatenate(D4, 0)
+        D5 = np.concatenate(D5, 0)
+    else:
+        [D1, D2, D3, D4, D5] = pkl.load(open(molvec_fname,'rb'))
     D1 = D1.todense()
     D2 = D2.todense()
     D3 = D3.todense()
@@ -172,7 +199,13 @@ def search_train(args, *extra_args):
     train(args, exp)
     exp.save()
 
+def save_func(model):
+    model.saver.save()
 
+def load_func(model, loaddir):
+    sess = tf.Session()
+    saver = tf.train.import_meta_graph('my_test_model-1000.meta')
+    saver.restore(model.sess, loaddir)
 
 if __name__ == '__main__':
 
@@ -182,7 +215,7 @@ if __name__ == '__main__':
     else:
         parser = argparse.ArgumentParser(description='Train network')
 
-    parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9'])
+    parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9', 'CSD'])
     parser.add_argument('--ckptdir', type=str, default='./checkpoints/')
     parser.add_argument('--eventdir', type=str, default='./events/')
     parser.add_argument('--savepreddir', type=str, default=None,

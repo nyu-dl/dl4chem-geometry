@@ -16,11 +16,12 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Train network')
 
-parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9'])
+parser.add_argument('--data', type=str, default='QM9', choices=['COD', 'QM9', 'CSD'])
 parser.add_argument('--root_ckptdir', type=str, default='./checkpoints/')
 parser.add_argument('--root_eventdir', type=str, default='./events/')
 parser.add_argument('--slurm_dir', type=str, default='./slurm/', help='where to write slurm output and err')
 parser.add_argument('--num_times', type=int, default=4, help='number of times to launch an experiment')
+parser.add_argument('--start', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -40,7 +41,7 @@ if __name__ == "__main__":
         # launch slurm jobs one after another
         slurm_dep = None
         name = ''.join(option).replace(' ', '_').replace('--', '_')
-        for i in range(args.num_times):
+        for i in range(args.start, args.num_times):
             ckptdir = os.path.join(args.root_ckptdir, args.data, "{}_run{}".format(name, i))
             eventdir = os.path.join(args.root_eventdir, args.data, "{}_run{}".format(name, i))
 
@@ -51,6 +52,7 @@ if __name__ == "__main__":
             if i > 0:
                 loaddir = os.path.join(os.path.join(args.root_ckptdir, args.data, "{}_run{}".format(name, i-1)), "neuralnet_model.ckpt")
                 CURR_SUB_FLAGS += " --loaddir {}".format(loaddir)
+            if i > args.start:
                 # dependency flag for slurm
                 dep_flag = "--dependency=afterany:{}".format(slurm_dep)
             else:
