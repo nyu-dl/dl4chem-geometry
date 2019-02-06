@@ -22,7 +22,7 @@ class Model(object):
                 batch_size, val_num_samples, \
                 mpnn_steps=5, alignment_type='default', tol=1e-5, \
                 use_X=True, use_R=True, virtual_node=False, seed=0, \
-                refine_steps=0, refine_mom=0.99):
+                refine_steps=0, refine_mom=0.99, prior_T=1):
 
         # set random seed
         np.random.seed(seed)
@@ -76,7 +76,7 @@ class Model(object):
         self.priorZ_hidden = self._MPNN(self.priorZ_edge_wgt, self.node_embed, name = 'priorZ', reuse = False)
         self.priorZ_out = self._g_nn(self.priorZ_hidden, self.node_embed, 2 * self.dim_h, name = 'priorZ', reuse = False)
         self.priorZ_mu, self.priorZ_lsgms = tf.split(self.priorZ_out, [self.dim_h, self.dim_h], 2)
-        self.priorZ_sample = self._draw_sample(self.priorZ_mu, self.priorZ_lsgms)
+        self.priorZ_sample = self._draw_sample(self.priorZ_mu, self.priorZ_lsgms, T=prior_T)
 
         # q(Z|R(X),G) -- posterior of Z, used R insted of X as input for simplicity, should be updated
         if use_R:
@@ -115,7 +115,7 @@ class Model(object):
 
 
     def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, \
-                tm_v=None, debug=False, savepred_path=None):
+                tm_v=None, debug=False, savepred_path=None, savepermol=False):
         if load_path is not None:
             self.saver.restore( self.sess, load_path )
 
@@ -131,7 +131,8 @@ class Model(object):
         valscores_std = np.zeros(val_size)
 
         if savepred_path != None:
-            pred_v = np.zeros((len(D1_v), self.val_num_samples, self.n_max, 3))
+            if not savepermol:
+                pred_v = np.zeros((len(D1_v), self.val_num_samples, self.n_max, 3))
 
         print ("testing model...")
         for i in range(n_batch_val):
@@ -156,7 +157,8 @@ class Model(object):
                 D5_batch = self.sess.run(self.PX_pred, feed_dict=dict_val)
 
             if savepred_path != None:
-                pred_v[start_:end_] = D5_batch.reshape(val_batch_size, self.val_num_samples, self.n_max, 3)
+                if not savepermol:
+                    pred_v[start_:end_] = D5_batch.reshape(val_batch_size, self.val_num_samples, self.n_max, 3)
 
             # iterative refinement of posterior
             D5_batch_pred = copy.deepcopy(D5_batch)
@@ -186,10 +188,20 @@ class Model(object):
             valscores_mean[start_:end_] = valres_mean
             valscores_std[start_:end_] = valres_std
 
+            # save results per molecule if request
+            if savepermol:
+                pred_curr = copy.deepcopy(D5_batch_pred).reshape(val_batch_size, self.val_num_samples, self.n_max, 3)
+                for tt in range(0, val_batch_size):
+                    save_dict_tt = {'rmsd': valres[tt], 'pred': pred_curr[tt]}
+                    pkl.dump(save_dict_tt, \
+                        open(os.path.join(savepred_path, 'mol_{}_neuralnet.p'.format(tt+start_)), 'wb'))
+
         print ("val scores: mean is {} , std is {}".format(np.mean(valscores_mean), np.mean(valscores_std)))
         if savepred_path != None:
-            print ("saving neural net predictions into {}".format(savepred_path))
-            pkl.dump(pred_v, open(savepred_path, 'wb'))
+            if not savepermol:
+                print ("saving neural net predictions into {}".format(savepred_path))
+                pkl.dump(pred_v, open(savepred_path, 'wb'))
+
         return np.mean(valscores_mean), np.mean(valscores_std)
 
     def getRMS(self, prb_mol, ref_pos, useFF=False):
@@ -259,10 +271,11 @@ class Model(object):
 
         # training
         print('::: start training')
-        valaggr_mean = np.zeros(500)
-        valaggr_std = np.zeros(500)
+        num_epochs = 2500
+        valaggr_mean = np.zeros(num_epochs)
+        valaggr_std = np.zeros(num_epochs)
 
-        for epoch in range(500):
+        for epoch in range(num_epochs):
 
             [D1_t, D2_t, D3_t, D4_t, D5_t] = self._permutation([D1_t, D2_t, D3_t, D4_t, D5_t])
 
@@ -412,10 +425,10 @@ class Model(object):
         return set
 
 
-    def _draw_sample(self, mu, lsgms):
+    def _draw_sample(self, mu, lsgms, T=1):
 
         epsilon = tf.random_normal(tf.shape(lsgms), 0., 1.)
-        sample = tf.multiply(tf.exp(0.5 * lsgms), epsilon)
+        sample = tf.multiply(tf.exp(0.5 * lsgms) * T, epsilon)
         sample = tf.add(mu, sample)
         sample = tf.multiply(sample, self.mask)
 
