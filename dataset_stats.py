@@ -7,7 +7,7 @@ def get_statistics(molset_fname):
     with open(molset_fname, 'rb') as f:
         mols = pickle.load(f)[0]
 
-    dataset_distinct_atoms = {}
+    dataset_distinct_atoms = set()
     num_distinct_atoms = []
     num_bonds = []
     num_rotatable_bonds = []
@@ -18,7 +18,7 @@ def get_statistics(molset_fname):
         atoms = mol.GetAtoms()
         symbols = [atom.GetSymbol() for atom in atoms]
         dataset_distinct_atoms.update(symbols)
-        num_distinct_atoms.append(len({symbols}))
+        num_distinct_atoms.append(len(set(symbols)))
         num_bonds.append(len(mol.GetBonds()))
         num_rotatable_bonds.append(Descriptors.NumRotatableBonds(mol))
         molecular_mass.append(Descriptors.HeavyAtomMolWt(mol))
@@ -40,9 +40,10 @@ def get_statistics(molset_fname):
     return [num_distinct_atoms_dataset, num_distinct_atoms, num_bonds, num_rotatable_bonds, molecular_mass, contains_symmetric_pair]
 
 if __name__ == '__main__':
-    dataset_fnames = ['QM9_molset_all.p', 'COD_molset_all.p', 'CSD_molset_all.p']
-    df = pd.DataFrame(columns = ['num_distinct_atoms_dataset', 'num_distinct_atoms', 'num_bonds', 'num_rotatable_bonds',
+    dataset_fnames = ['QM9_molset_all.p', 'COD_molset_all.p', 'CSD_molset_50.p']
+    df = pd.DataFrame(columns = ['Dataset', 'num_distinct_atoms_dataset', 'num_distinct_atoms', 'num_bonds', 'num_rotatable_bonds',
                                  'molecular_mass', 'contains_symmetric_pair'])
-    for fname in dataset_fnames:
-        df.append([fname.split('_')[0]] + get_statistics(molset_fname=fname))
+    for i, fname in enumerate(dataset_fnames):
+        row = [fname.split('_')[0]] + get_statistics(molset_fname=fname)
+        df.loc[i] = row
     df.to_csv('statistics.csv')
