@@ -115,7 +115,7 @@ class Model(object):
 
 
     def test(self, D1_v, D2_v, D3_v, D4_v, D5_v, MS_v, load_path = None, \
-                tm_v=None, debug=False, savepred_path=None, savepermol=False):
+                tm_v=None, debug=False, savepred_path=None, savepermol=False, useFF=False):
         if load_path is not None:
             self.saver.restore( self.sess, load_path )
 
@@ -177,7 +177,7 @@ class Model(object):
             valres=[]
             for j in range(D5_batch_pred.shape[0]):
                 ms_v_index = int(j / self.val_num_samples) + start_
-                res = self.getRMS(MS_v[ms_v_index], D5_batch_pred[j])
+                res = self.getRMS(MS_v[ms_v_index], D5_batch_pred[j], useFF)
                 valres.append(res)
 
             valres = np.array(valres)
