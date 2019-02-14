@@ -176,11 +176,11 @@ def train(args, exp=None):
             if args.use_val:
                 model.test(D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
                             load_path=args.loaddir, tm_v=tm_val, debug=args.debug, \
-                            savepred_path=args.savepreddir, savepermol=args.savepermol)
+                            savepred_path=args.savepreddir, savepermol=args.savepermol, useFF=args.useFF)
             else:
                 model.test(D1_tst, D2_tst, D3_tst, D4_tst, D5_tst, molsup_tst, \
                             load_path=args.loaddir, tm_v=tm_tst, debug=args.debug, \
-                            savepred_path=args.savepreddir, savepermol=args.savepermol)
+                            savepred_path=args.savepreddir, savepermol=args.savepermol, useFF=args.useFF)
         else:
             model.train(D1_trn, D2_trn, D3_trn, D4_trn, D5_trn, molsup_trn, \
                         D1_val, D2_val, D3_val, D4_val, D5_val, molsup_val, \
@@ -240,6 +240,7 @@ if __name__ == '__main__':
     parser.add_argument('--refine_mom', type=float, default=0.99, help='momentum used for refinement')
     parser.add_argument('--refine_steps', type=int, default=0, help='number of refinement steps if requested')
     parser.add_argument('--log_train_steps', type=int, default=100, help='number of steps to log train')
+    parser.add_argument('--useFF', action='store_true', help='use force field minimisation if testing')
 
     if hyperparameter_search:
         parser.add_argument('--nb_trials', type=int, default=8, help='number of hyperparameter combinations')
