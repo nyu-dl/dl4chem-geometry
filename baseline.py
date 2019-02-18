@@ -14,7 +14,7 @@ import getpass
 from collections import OrderedDict
 parser = argparse.ArgumentParser(description='Run baseline model')
 
-parser.add_argument('--data', type=str, default='COD', choices=['COD','QM9'], help='which dataset to use')
+parser.add_argument('--data', type=str, default='COD', choices=['COD','QM9', 'CSD'], help='which dataset to use')
 parser.add_argument('--use-val', action='store_true', help='use validation set instead of test set')
 parser.add_argument('--savedir', type=str, default='./', help='save directory of results')
 parser.add_argument('--num-total-samples', type=int, default=10, help='number of total samples to use per molecule')
@@ -48,6 +48,11 @@ elif args.data == "QM9":
     n_max=9
     nval=5000
     ntst=5000
+
+elif args.data == "CSD":
+    n_max=50
+    nval=3000
+    ntst=3000
 
 [suppl, molsmi] = pkl.load(open(data_path()+str(args.data)+'_molset_'+str(n_max)+'.p','rb'))
 assert (len(suppl) == len(molsmi))

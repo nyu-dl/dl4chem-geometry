@@ -4,10 +4,12 @@ from sklearn.metrics.pairwise import euclidean_distances
 import copy, csv
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import ChemicalForceFields
 from rdkit.Chem import rdDistGeom as molDG
 from rdkit.Chem.Pharm3D.EmbedLib import EmbedMol
 import rdkit.DistanceGeometry as DG
 import rdkit.Geometry as Geometry
+from rdkit.Chem.rdtrajectory import Snapshot, Trajectory
 import pdb
 import pickle as pkl
 import os
@@ -98,10 +100,10 @@ if args.savepermol:
             os.makedirs(os.path.join(dir_name, "mols"))
 
 logger.info ('running loop starting from {} up to {}'.format(args.min_mol_id, args.max_mol_id))
+#trajectories = []
 
 for t in range(args.min_mol_id, args.max_mol_id):
     # load neural net predictions
-
     if args.nn_path:
         mol_nn_pred = pkl.load(open('{}/{}/{}/mol_{}_neuralnet.p'.format(args.nn_path, args.data, data_split, t), 'rb'))
         mol_nn_pred = mol_nn_pred['pred']
@@ -189,11 +191,18 @@ for t in range(args.min_mol_id, args.max_mol_id):
             ttest_uff.append(RMS_UFF)
         except:
             continue
-
         try:
             ## baseline force field part with MMFF
             mol_baseMMFF = copy.deepcopy(mol_init_hs)
             mmff_out = AllChem.MMFFOptimizeMolecule(mol_baseMMFF, maxIters=args.max_iters)
+            #AllChem.MMFFSanitizeMolecule(mol_baseMMFF)
+            #mmff_props = ChemicalForceFields.MMFFGetMoleculeProperties(mol_baseMMFF)
+            #ff = ChemicalForceFields.MMFFGetMoleculeForceField(mol_baseMMFF, mmff_props)
+            #mmff_out, snapshots = ff.MinimizeTrajectory(snapshotFreq=1, maxIts=args.max_iters)
+            #trajectories.append(dimension=3, numPoints=snapshots[0]snapshotList=Trajectory(snapshots))
+            #conf_energies = [snapshot.GetEnergy() for snapshot in snapshots]
+            #print(conf_energies, flush=True)
+            #energies.append(conf_energies)
             #mmff_converged.append(1 - mmff_out)
             mol_baseMMFF=Chem.RemoveHs(mol_baseMMFF)
             RMS_MMFF = AllChem.AlignMol(mol_baseMMFF, mol_ref)
