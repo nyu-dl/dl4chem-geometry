@@ -41,7 +41,6 @@ def train(args, exp=None):
         if args.virtual_node is True:
             n_max += 1
             dim_edge += 1
-        ntrn = 100000
         nval = 5000
         ntst = 5000
     elif args.data == 'CSD':
