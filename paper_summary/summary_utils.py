@@ -65,14 +65,11 @@ def read_mols_baseline2(folder, num_conformers):
         if len(mol['mmff']) == 0 or len(mol['uff']) == 0:
             continue
         # mmff is has 2 columns (1st is number of heavy atoms, 2nd is mmff score)
-        mol['embed'] = np.array(mol['embed'])
         mol['mmff'] = np.array(mol['mmff'])
         mol['uff'] = np.array(mol['uff'])
-        mol['min_embed'] = get_rmsd_stats(mol['embed'], num_conformers, which="min")
         mol['min_mmff'] = get_rmsd_stats(mol['mmff'], num_conformers, which="min")
         mol['min_uff'] = get_rmsd_stats(mol['uff'], num_conformers, which="min")
         
-        mol['median_embed'] = get_rmsd_stats(mol['embed'], num_conformers, which="median")
         mol['median_mmff'] = get_rmsd_stats(mol['mmff'], num_conformers, which="median")
         mol['median_uff'] = get_rmsd_stats(mol['uff'], num_conformers, which="median")
         
