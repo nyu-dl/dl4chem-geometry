@@ -1,6 +1,6 @@
 # Molecular Geometry Prediction using a Deep Generative Graph Neural Network
 
-TensorFlow implementation of the models described in the paper Molecular Geometry Prediction using a Deep Generative Graph Neural Network.
+TensorFlow implementation of the models described in the paper [Molecular Geometry Prediction using a Deep Generative Graph Neural Network](https://arxiv.org/abs/1904.00314 "Molecular Geometry Prediction using a Deep Generative Graph Neural Network").
 
 We present code for training deep generative models of molecular geometry (conformations), as well as preprocessed datasets and pretrained models.
 
@@ -77,7 +77,7 @@ If you find the resources in this repository useful, please consider citing:
 ```
 @article{Mansimov:19,
   author    = {Elman Mansimov and Omar Mahmood and Seokho Kang and Kyunghyun Cho},
-  title     = {Molecular geometry prediction using a deep generative graph neural network},
+  title     = {Molecular Geometry Prediction using a Deep Generative Graph Neural Network},
   year      = {2019},
   journal   = {arXiv preprint arXiv:1904.00314},
 }
