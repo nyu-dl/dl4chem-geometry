@@ -69,3 +69,16 @@ Example (QM9):
 ## Additional Scripts
 
 `QM9_featurize.py`, `QM9_sdf_to_p.py`, `COD_featurize.py`, `COD_sdf_to_p.py`, `CSD_featurize.py`, `CSD_sdf_to_p.py` are scripts for preprocessing QM9, COD, CSD datasets respectively
+
+
+Citation
+------------------
+If you find the resources in this repository useful, please consider citing:
+```
+@article{Mansimov:19,
+  author    = {Elman Mansimov and Omar Mahmood and Seokho Kang and Kyunghyun Cho},
+  title     = {Molecular geometry prediction using a deep generative graph neural network},
+  year      = {2019},
+  journal   = {arXiv preprint arXiv:1904.00314},
+}
+```
