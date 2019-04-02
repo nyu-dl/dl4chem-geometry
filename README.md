@@ -9,7 +9,7 @@ Dependencies
 ### Python
 * Python 3.6
 * TensorFlow 1.2
-* rdkit
+* RDKit 2018.09.1
 * tensorboardX
 
 ### GPU
