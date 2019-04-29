@@ -1,0 +1,10 @@
+number of distinct heavy atoms in dataset
+number of distinct heavy atoms per molecule
+number of bonds per molecule/connectivity
+number of rotatable bonds per molecule
+number of molecules with symmetrical property in dataset
+molecular mass
+
+Remember to exclude hydrogens where suitable
+
+Why are the datasets organised in the way they are (why is QM9 a dataset, why is COD a dataset, why is CSD a dataset)
